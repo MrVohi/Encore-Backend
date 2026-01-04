@@ -194,9 +194,15 @@ func main() {
 
 	// Config API routes
 	router := gin.Default()
-	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://127.0.0.1:5500"}
+	config := cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			return origin == "http://localhost:5173" || origin == "http://127.0.0.1:5173"
+		},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
+	}
 	router.Use(cors.New(config))
+
 	router.GET("/api/artists", getArtists(db))
 	router.GET("/api/artists/:id", getArtistByID(db))
 	router.POST("/api/artists", postArtist(db))
