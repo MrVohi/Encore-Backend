@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -13,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
@@ -34,13 +37,21 @@ func InitArtists() []artist {
 }
 
 // Connect backend to database
-func conn_db(user string, pass string) (*pgx.Conn, error) {
-	// Capture connection
-	conn, err := pgx.Connect(context.Background(), fmt.Sprintf("postgres://%s:%s@localhost:5432/Encore_DB", user, pass))
+func conn_db(user string, pass string) (*pgxpool.Pool, error) {
+	dsn := fmt.Sprintf("postgres://%s:%s@localhost:5432/Encore_DB", user, pass)
+
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return conn, nil
+
+	// Optional tuning:
+	// cfg.MaxConns = 10
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return pgxpool.NewWithConfig(ctx, cfg)
 }
 
 // Convert from database to JSON
@@ -49,10 +60,10 @@ func artistToJSON(dbID string, dbName string, dbGenre string, dbImageURL string,
 }
 
 // Find all artists in database
-func queryArtists(ctx context.Context, conn *pgx.Conn) ([]artist, error) {
+func queryArtists(ctx context.Context, db *pgxpool.Pool) ([]artist, error) {
 	artists := []artist{}
 
-	rows, err := conn.Query(ctx, "SELECT id, name, genre, image_url, preview_url, created_at FROM artists")
+	rows, err := db.Query(ctx, "SELECT id, name, genre, image_url, preview_url, created_at FROM artists")
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +87,7 @@ func queryArtists(ctx context.Context, conn *pgx.Conn) ([]artist, error) {
 }
 
 // Find artist by ID in database
-func querySpecificArtist(ctx context.Context, conn *pgx.Conn, artistID string) (artist, error) {
+func querySpecificArtist(ctx context.Context, db *pgxpool.Pool, artistID string) (artist, error) {
 	var (
 		id         pgtype.UUID
 		name       string
@@ -86,7 +97,7 @@ func querySpecificArtist(ctx context.Context, conn *pgx.Conn, artistID string) (
 		createdAt  time.Time
 	)
 
-	err := conn.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT id, name, genre, image_url, preview_url, created_at
 		FROM artists
 		WHERE id = $1
@@ -107,13 +118,13 @@ func querySpecificArtist(ctx context.Context, conn *pgx.Conn, artistID string) (
 }
 
 // Insert a new artist into the database
-func insertArtist(ctx context.Context, conn *pgx.Conn, a artist) (artist, error) {
+func insertArtist(ctx context.Context, db *pgxpool.Pool, a artist) (artist, error) {
 	var (
 		id        pgtype.UUID
 		createdAt time.Time
 	)
 
-	err := conn.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO artists (name, genre, image_url, preview_url)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at
@@ -129,7 +140,7 @@ func insertArtist(ctx context.Context, conn *pgx.Conn, a artist) (artist, error)
 }
 
 // Receives new artis informations and transfer them to the db handler
-func postArtist(conn *pgx.Conn) gin.HandlerFunc {
+func postArtist(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var newArtist artist
 		if err := c.BindJSON(&newArtist); err != nil {
@@ -137,7 +148,7 @@ func postArtist(conn *pgx.Conn) gin.HandlerFunc {
 			return
 		}
 
-		a, err := insertArtist(c.Request.Context(), conn, newArtist)
+		a, err := insertArtist(c.Request.Context(), db, newArtist)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -148,9 +159,9 @@ func postArtist(conn *pgx.Conn) gin.HandlerFunc {
 }
 
 // API Handler to find all artist in DB
-func getArtists(conn *pgx.Conn) gin.HandlerFunc {
+func getArtists(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		artists, err := queryArtists(c.Request.Context(), conn)
+		artists, err := queryArtists(c.Request.Context(), db)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -160,9 +171,9 @@ func getArtists(conn *pgx.Conn) gin.HandlerFunc {
 }
 
 // API Handler to find specific artist in DB
-func getArtistByID(conn *pgx.Conn) gin.HandlerFunc {
+func getArtistByID(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		a, err := querySpecificArtist(c.Request.Context(), conn, c.Param("id"))
+		a, err := querySpecificArtist(c.Request.Context(), db, c.Param("id"))
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "artist not found"})
@@ -172,6 +183,75 @@ func getArtistByID(conn *pgx.Conn) gin.HandlerFunc {
 			return
 		}
 		c.IndentedJSON(http.StatusOK, a)
+	}
+}
+
+type searchArtist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func normalizeQuery(q string) string {
+	return strings.Join(strings.Fields(q), " ")
+}
+
+func searchToJSON(dbID string, dbName string) artist {
+	return artist{ID: dbID, Name: dbName}
+}
+
+func fetchSearch(ctx context.Context, db *pgxpool.Pool, q string, limit int) ([]searchArtist, error) {
+	q = normalizeQuery(q)
+
+	if len(q) < 2 {
+		return []searchArtist{}, nil
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, name
+		FROM artists
+		WHERE lower(regexp_replace(name, '\s+', ' ', 'g'))
+		      LIKE '%' || lower($1) || '%'
+		ORDER BY name
+		LIMIT $2
+	`, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := make([]searchArtist, 0, limit)
+	for rows.Next() {
+		var id pgtype.UUID
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		results = append(results, searchArtist{
+			ID:   id.String(),
+			Name: name,
+		})
+	}
+	return results, rows.Err()
+}
+
+func search(db *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		q := c.Query("q")
+
+		limit := 10
+		if v := c.Query("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+				limit = n
+			}
+		}
+
+		results, err := fetchSearch(c.Request.Context(), db, q, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, results)
 	}
 }
 
@@ -190,7 +270,7 @@ func main() {
 	}
 
 	// Close the database connection when the program exits.
-	defer db.Close(context.Background())
+	defer db.Close()
 
 	// Config API routes
 	router := gin.Default()
@@ -206,6 +286,7 @@ func main() {
 	router.GET("/api/artists", getArtists(db))
 	router.GET("/api/artists/:id", getArtistByID(db))
 	router.POST("/api/artists", postArtist(db))
+	router.GET("/api/search", search(db))
 
 	router.Run("localhost:8080")
 }
