@@ -6,10 +6,12 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"groupie-tracker/internal/album"
 	"groupie-tracker/internal/artist"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
 	httpserver "groupie-tracker/internal/http"
+	"groupie-tracker/internal/track"
 )
 
 func main() {
@@ -31,6 +33,12 @@ func main() {
 	artistRepo := artist.NewRepository(pool)
 	artistHandler := artist.NewHandler(artistRepo)
 
-	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler)
+	albumRepo := album.NewRepository(pool)
+	albumHandler := album.NewHandler(albumRepo)
+
+	trackRepo := track.NewRepository(pool)
+	trackHandler := track.NewHandler(trackRepo)
+
+	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler)
 	log.Fatal(r.Run(cfg.Addr))
 }
