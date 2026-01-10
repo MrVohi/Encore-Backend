@@ -1,78 +1,78 @@
 package utils
 
 import (
-    "errors"
-    "os"
-    "time"
+	"errors"
+	"os"
+	"time"
 
-    "github.com/golang-jwt/jwt/v5"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Claims struct {
-    UserID string `json:"user_id"`
-    Email  string `json:"email"`
-    jwt.RegisteredClaims
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	jwt.RegisteredClaims
 }
 
 func GenerateToken(userID, email string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    
-    claims := &Claims{
-        UserID: userID,
-        Email:  email,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "votre-app",
-        },
-    }
+	expirationTime := time.Now().Add(24 * time.Hour)
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-    
-    if err != nil {
-        return "", err
-    }
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "votre-app",
+		},
+	}
 
-    return tokenString, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
 }
 
 func GenerateRefreshToken(userID string) (string, error) {
-    expirationTime := time.Now().Add(168 * time.Hour) // 7 days
-    
-    claims := &Claims{
-        UserID: userID,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "votre-app-refresh",
-        },
-    }
+	expirationTime := time.Now().Add(168 * time.Hour) // 7 days
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-    
-    if err != nil {
-        return "", err
-    }
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "votre-app-refresh",
+		},
+	}
 
-    return tokenString, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
 }
 
 func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return []byte(os.Getenv("JWT_SECRET")), nil
-    })
+	claims := &Claims{}
 
-    if err != nil {
-        return nil, err
-    }
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
 
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
+	if err != nil {
+		return nil, err
+	}
 
-    return claims, nil
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
 }

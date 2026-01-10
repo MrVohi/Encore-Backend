@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 
+	"groupie-tracker/internal/authentification/models"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -33,10 +35,8 @@ func Connect() {
 
 	log.Println("Database connected successfully")
 
-	// Enable UUID extension
 	DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
 
-	// Auto migrate
 	err = DB.AutoMigrate(&models.User{}, &models.RefreshToken{})
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
