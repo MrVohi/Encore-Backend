@@ -14,7 +14,7 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		Addr:        env("ADDR", "localhost:8080"),
-		DatabaseURL: os.Getenv("POSTGRES_URL"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 		FrontendURL: env("FRONTEND_URL", "http://localhost:5173"),
 	}
 
