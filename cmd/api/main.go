@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/joho/godotenv"
@@ -34,6 +35,11 @@ func main() {
 		log.Fatal("Erreur connexion DB Artistes:", err)
 	}
 	defer pool.Close()
+
+	var db, schema, addr string
+	var port int
+	err = pool.QueryRow(ctx, `SELECT current_database(), current_schema(), inet_server_addr()::text, inet_server_port()`).Scan(&db, &schema, &addr, &port)
+	fmt.Println("CONNECTED TO:", db, schema, addr, port)
 
 	database.Connect()
 
