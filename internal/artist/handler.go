@@ -22,7 +22,10 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *Handler) list(c *gin.Context) {
-	artists, err := h.repo.List(c.Request.Context())
+	name := c.Query("name")
+	genre := c.Query("genre")
+	order := c.Query("order")
+	artists, err := h.repo.List(c.Request.Context(), name, genre, order)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

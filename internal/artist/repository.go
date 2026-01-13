@@ -2,6 +2,8 @@ package artist
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -14,12 +16,45 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-func (r *Repository) List(ctx context.Context) ([]Artist, error) {
-	rows, err := r.pool.Query(ctx, `
+func (r *Repository) List(ctx context.Context, name, genre, order string) ([]Artist, error) {
+	var (
+		args  []any
+		where []string
+	)
+
+	// Filters with dynamic placeholders
+	if name != "" {
+		args = append(args, "%"+name+"%")
+		where = append(where, fmt.Sprintf("name ILIKE $%d", len(args)))
+	}
+
+	if genre != "" {
+		args = append(args, strings.ReplaceAll(genre, "+", " "))
+		where = append(where, fmt.Sprintf("genre = $%d", len(args)))
+	}
+
+	whereSQL := "1=1"
+	if len(where) > 0 {
+		whereSQL = strings.Join(where, " AND ")
+	}
+
+	// ORDER BY whitelist (avoid SQL injection)
+	orderBy := "created_at DESC"
+	switch order {
+	case "name_asc":
+		orderBy = "name ASC"
+	case "name_desc":
+		orderBy = "name DESC"
+	}
+
+	sql := fmt.Sprintf(`
 		SELECT id, name, genre, image_url, preview_url, created_at
 		FROM artists
-		ORDER BY created_at DESC
-	`)
+		WHERE %s
+		ORDER BY %s
+	`, whereSQL, orderBy)
+
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
