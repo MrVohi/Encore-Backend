@@ -7,19 +7,22 @@ import (
 )
 
 type User struct {
-	ID                 string         `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()" json:"id"`
-	Email              string         `gorm:"uniqueIndex;not null" json:"email"`
-	Password           string         `gorm:"not null" json:"-"`
-	FirstName          string         `json:"first_name"`
-	LastName           string         `json:"last_name"`
-	IsEmailVerified    bool           `gorm:"default:false" json:"is_email_verified"`
-	EmailVerifyToken   string         `json:"-"`
-	ResetPasswordToken string         `json:"-"`
-	ResetPasswordExp   *time.Time     `json:"-"`
-	GoogleID           string         `gorm:"uniqueIndex" json:"google_id,omitempty"`
-	Provider           string         `gorm:"default:'local'" json:"provider"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ID                 string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	Name               string     `gorm:"not null" json:"name"`
+	Username           string     `gorm:"not null;uniqueIndex" json:"username"`
+	Email              string     `gorm:"column:email;not null;uniqueIndex" json:"email"`
+	PasswordHash       string     `gorm:"column:password_hash" json:"-"`
+	Role               string     `gorm:"not null;default:user" json:"role"`
+	FirstName          string     `json:"first_name"`
+	LastName           string     `json:"last_name"`
+	IsEmailVerified    bool       `gorm:"default:false" json:"is_email_verified"`
+	EmailVerifyToken   string     `json:"-"`
+	ResetPasswordToken string     `json:"-"`
+	ResetPasswordExp   *time.Time `json:"-"`
+	GoogleID           string     `gorm:"uniqueIndex" json:"google_id,omitempty"`
+	Provider           string     `gorm:"default:'local'" json:"provider"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

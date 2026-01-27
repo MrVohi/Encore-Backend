@@ -66,7 +66,7 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 
 func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 	var input struct {
-		Email string `json:"email" binding:"required,email"`
+		Email string `json:"mail" binding:"required,mail"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -154,7 +154,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	userEmail, _ := c.Get("user_email")
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":    userID,
-		"email": userEmail,
+		"id":   userID,
+		"mail": userEmail,
 	})
 }

@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"groupie-tracker/internal/authentification/database"
@@ -46,6 +47,7 @@ func NewAuthService() *AuthService {
 
 type RegisterInput struct {
 	Email          string `json:"email" binding:"required,email"`
+	Username       string `json:"username" binding:"required"`
 	Password       string `json:"password" binding:"required,min=8"`
 	FirstName      string `json:"first_name" binding:"required"`
 	LastName       string `json:"last_name" binding:"required"`
@@ -65,41 +67,145 @@ type AuthResponse struct {
 
 func (s *AuthService) VerifyRecaptcha(token string) (bool, error) {
 	secret := os.Getenv("RECAPTCHA_SECRET")
-	url := fmt.Sprintf("https://www.google.com/recaptcha/api/siteverify?secret=%s&response=%s", secret, token)
+	if secret == "" {
+		return false, fmt.Errorf("RECAPTCHA_SECRET not set")
+	}
+	if strings.TrimSpace(token) == "" {
+		return false, fmt.Errorf("recaptcha token missing")
+	}
 
-	resp, err := http.Post(url, "application/json", nil)
+	form := url.Values{}
+	form.Set("secret", secret)
+	form.Set("response", token)
+
+	resp, err := http.PostForm("https://www.google.com/recaptcha/api/siteverify", form)
 	if err != nil {
 		return false, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, err
-	}
-
 	var result struct {
-		Success bool    `json:"success"`
-		Score   float64 `json:"score"`
+		Success    bool     `json:"success"`
+		Hostname   string   `json:"hostname"`
+		ErrorCodes []string `json:"error-codes"`
 	}
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return false, err
 	}
 
-	// Pour reCAPTCHA v3, vérifier le score (0.0 à 1.0)
-	// Score > 0.5 est généralement considéré comme humain
+	if !result.Success {
+		return false, fmt.Errorf("recaptcha failed: %v", result.ErrorCodes)
+	}
 
-	return result.Success && result.Score > 0.5, nil
+	// Optional: lock to dev/prod hostnames
+	// if result.Hostname != "localhost" && result.Hostname != "yourdomain.com" {
+	// 	return false, fmt.Errorf("recaptcha hostname mismatch: %s", result.Hostname)
+	// }
+
+	return true, nil
+}
+
+func sanitizeUsername(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+
+	// keep only [a-z0-9._-]
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.' || r == '_' || r == '-':
+			b.WriteRune(r)
+		}
+	}
+	out := strings.Trim(b.String(), "._-")
+	if out == "" {
+		return ""
+	}
+	if len(out) > 24 {
+		out = out[:24]
+	}
+	return out
+}
+
+func baseFromEmail(email string) string {
+	local := email
+	if i := strings.Index(email, "@"); i > 0 {
+		local = email[:i]
+	}
+	return sanitizeUsername(local)
+}
+
+func usernameAvailable(db *gorm.DB, username string) (bool, error) {
+	var u models.User
+	err := db.Select("id").
+		Where("username = ?", username).
+		First(&u).Error
+
+	if err == nil {
+		return false, nil
+	}
+	if err == gorm.ErrRecordNotFound {
+		return true, nil
+	}
+	return false, err
+}
+
+func generateUniqueUsername(db *gorm.DB, input RegisterInput) (string, error) {
+	base := sanitizeUsername(input.Username)
+	if base == "" {
+		base = baseFromEmail(input.Email)
+	}
+	if base == "" {
+		base = "user"
+	}
+
+	ok, err := usernameAvailable(db, base)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return base, nil
+	}
+
+	for i := 2; i <= 9999; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+
+		// optional: enforce max length (example: 32)
+		if len(candidate) > 32 {
+			suffix := fmt.Sprintf("-%d", i)
+			maxBase := 32 - len(suffix)
+			if maxBase < 1 {
+				candidate = "user" + suffix
+			} else if len(base) > maxBase {
+				candidate = base[:maxBase] + suffix
+			}
+		}
+
+		ok, err := usernameAvailable(db, candidate)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not generate a unique username")
 }
 
 func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
-	db := database.GetDB()
+	db := database.GetDB().Debug()
 
 	isHuman, err := s.VerifyRecaptcha(input.RecaptchaToken)
-	if err != nil || !isHuman {
+	/* if err != nil || !isHuman {
 		return nil, errors.New("échec de la vérification reCAPTCHA")
+	} */
+	if err != nil || !isHuman {
+		return nil, fmt.Errorf("recaptcha: %v", err)
 	}
 
 	var existingUser models.User
@@ -118,14 +224,19 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	username, err := generateUniqueUsername(db, input)
+	if err != nil {
+		return nil, err
+	}
+
 	user := models.User{
-		Email:            input.Email,
-		Password:         hashedPassword,
-		FirstName:        input.FirstName,
-		LastName:         input.LastName,
-		EmailVerifyToken: verifyToken,
-		IsEmailVerified:  false,
-		Provider:         "local",
+		Email:        input.Email,
+		PasswordHash: hashedPassword,
+		Name:         input.FirstName + " " + input.LastName,
+		FirstName:    input.FirstName,
+		LastName:     input.LastName,
+		Provider:     "local",
+		Username:     username,
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -151,7 +262,7 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	}
 	db.Create(&refreshTokenRecord)
 
-	user.Password = ""
+	user.PasswordHash = ""
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
@@ -171,7 +282,7 @@ func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	if !utils.CheckPassword(input.Password, user.Password) {
+	if !utils.CheckPassword(input.Password, user.PasswordHash) {
 		return nil, errors.New("e-mail ou mot de passe incorrect")
 	}
 
@@ -192,7 +303,7 @@ func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
 	}
 	db.Create(&refreshTokenRecord)
 
-	user.Password = ""
+	user.PasswordHash = ""
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
@@ -258,7 +369,7 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 		return err
 	}
 
-	user.Password = hashedPassword
+	user.PasswordHash = hashedPassword
 	user.ResetPasswordToken = ""
 	user.ResetPasswordExp = nil
 
@@ -310,7 +421,7 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 				GoogleID:        googleUser.ID,
 				IsEmailVerified: googleUser.VerifiedEmail,
 				Provider:        "google",
-				Password:        uuid.New().String(),
+				PasswordHash:    uuid.New().String(),
 			}
 
 			if err := db.Create(&user).Error; err != nil {
@@ -344,7 +455,7 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 	}
 	db.Create(&refreshTokenRecord)
 
-	user.Password = ""
+	user.PasswordHash = ""
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
@@ -380,7 +491,7 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 		return nil, err
 	}
 
-	user.Password = ""
+	user.PasswordHash = ""
 
 	return &AuthResponse{
 		AccessToken:  newAccessToken,
