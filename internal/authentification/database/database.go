@@ -1,10 +1,9 @@
 package database
 
 import (
+	"groupie-tracker/internal/authentification/models"
 	"log"
 	"os"
-
-	"groupie-tracker/internal/authentification/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

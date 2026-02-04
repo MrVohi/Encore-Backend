@@ -61,7 +61,7 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "E-mail vérifié avec succès"})
+	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
 }
 
 func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
@@ -77,11 +77,11 @@ func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 	err := h.service.RequestPasswordReset(input.Email)
 	if err != nil {
 
-		c.JSON(http.StatusOK, gin.H{"message": "Si cet e-mail existe, un lien de réinitialisation a été envoyé"})
+		c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a reset link has been sent"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Si cet e-mail existe, un lien de réinitialisation a été envoyé"})
+	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a reset link has been sent"})
 }
 
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
@@ -101,7 +101,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Mot de passe réinitialisé avec succès"})
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 }
 
 func (h *AuthHandler) GoogleLogin(c *gin.Context) {

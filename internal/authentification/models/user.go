@@ -19,7 +19,7 @@ type User struct {
 	EmailVerifyToken   string     `json:"-"`
 	ResetPasswordToken string     `json:"-"`
 	ResetPasswordExp   *time.Time `json:"-"`
-	GoogleID           string     `gorm:"uniqueIndex" json:"google_id,omitempty"`
+	GoogleID           *string    `gorm:"uniqueIndex" json:"google_id,omitempty"`
 	Provider           string     `gorm:"default:'local'" json:"provider"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
