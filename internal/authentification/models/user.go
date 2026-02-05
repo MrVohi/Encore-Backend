@@ -16,6 +16,7 @@ type User struct {
 	FirstName          string     `json:"first_name"`
 	LastName           string     `json:"last_name"`
 	IsEmailVerified    bool       `gorm:"default:false" json:"is_email_verified"`
+	LastActiveAt       *time.Time `gorm:"column:last_active_at" json:"last_active_at,omitempty"`
 	EmailVerifyToken   string     `json:"-"`
 	ResetPasswordToken string     `json:"-"`
 	ResetPasswordExp   *time.Time `json:"-"`

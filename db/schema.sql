@@ -8,6 +8,7 @@ create table users (
   mail text not null unique,
   password_hash text, -- nullable for OAuth
   role text not null default 'user',
+  last_active_at timestamptz, -- nullable
   created_at timestamptz not null default now()
 );
 
@@ -32,12 +33,24 @@ create table tokens (
 );
 
 -- ARTIST
+create table media_assets (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  storage text not null,
+  object_key text not null,
+  mime_type text not null,
+  size_bytes bigint not null,
+  created_at timestamptz not null default now()
+);
+
 create table artists (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   genre text not null,
-  image_url text not null,
-  preview_url text not null,
+  image_url text, -- nullable for transition
+  preview_url text, -- nullable for transition
+  artwork_asset_id uuid references media_assets(id),
+  preview_asset_id uuid references media_assets(id),
   created_at timestamptz not null default now()
 );
 

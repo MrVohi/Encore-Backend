@@ -237,6 +237,7 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 		LastName:     input.LastName,
 		Provider:     "local",
 		Username:     username,
+		LastActiveAt: func() *time.Time { t := time.Now(); return &t }(),
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -262,6 +263,9 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	}
 	db.Create(&refreshTokenRecord)
 
+	now := time.Now()
+	_ = db.Model(&user).Update("last_active_at", now).Error
+
 	user.PasswordHash = ""
 
 	return &AuthResponse{
@@ -285,6 +289,9 @@ func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
 	if !utils.CheckPassword(input.Password, user.PasswordHash) {
 		return nil, errors.New("e-mail ou mot de passe incorrect")
 	}
+
+	now := time.Now()
+	_ = db.Model(&user).Update("last_active_at", now).Error
 
 	accessToken, err := utils.GenerateToken(user.ID, user.Email)
 	if err != nil {
@@ -422,6 +429,7 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 				IsEmailVerified: googleUser.VerifiedEmail,
 				Provider:        "google",
 				PasswordHash:    uuid.New().String(),
+				LastActiveAt:    func() *time.Time { t := time.Now(); return &t }(),
 			}
 
 			if err := db.Create(&user).Error; err != nil {
@@ -490,6 +498,9 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 	if err != nil {
 		return nil, err
 	}
+
+	now := time.Now()
+	_ = db.Model(&user).Update("last_active_at", now).Error
 
 	user.PasswordHash = ""
 

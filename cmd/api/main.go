@@ -14,6 +14,7 @@ import (
 
 	"groupie-tracker/internal/authentification/auth"
 	"groupie-tracker/internal/authentification/database"
+	"groupie-tracker/internal/media"
 	"groupie-tracker/internal/middleware"
 )
 
@@ -44,11 +45,15 @@ func main() {
 	database.Connect()
 
 	artistRepo := artist.NewRepository(pool)
-	artistHandler := artist.NewHandler(artistRepo)
+	mediaRepo := media.NewRepository(pool)
+	mediaService := media.NewService(mediaRepo, "uploads")
+	artistService := artist.NewService(artistRepo, mediaService)
+	artistHandler := artist.NewHandler(artistRepo, artistService)
 
 	authHandler := auth.NewAuthHandler()
 
 	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler)
+	r.Static("/uploads", "./uploads")
 
 	api := r.Group("/api")
 	{
@@ -64,6 +69,8 @@ func main() {
 			authGroup.GET("/google/callback", authHandler.GoogleCallback)
 			authGroup.POST("/refresh", authHandler.RefreshToken)
 		}
+
+		api.GET("/users", authHandler.ListUsers)
 
 		protected := api.Group("/")
 		protected.Use(middleware.AuthMiddleware())

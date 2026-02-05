@@ -2,8 +2,12 @@ package auth
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"groupie-tracker/internal/authentification/database"
+	"groupie-tracker/internal/authentification/models"
 )
 
 type AuthHandler struct {
@@ -151,10 +155,75 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	userID, _ := c.Get("user_id")
-	userEmail, _ := c.Get("user_email")
+	if userID == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	db := database.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database not initialized"})
+		return
+	}
+
+	var user models.User
+	if err := db.Select("id, email, role").First(&user, "id = ?", userID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":   userID,
-		"mail": userEmail,
+		"id":       user.ID,
+		"mail":     user.Email,
+		"is_admin": user.Role == "admin",
 	})
+}
+
+type userListItem struct {
+	ID           string  `json:"id"`
+	CreatedAt    string  `json:"created_at"`
+	IsVerified   *bool   `json:"is_verified,omitempty"`
+	LastActiveAt *string `json:"last_active_at,omitempty"`
+}
+
+func (h *AuthHandler) ListUsers(c *gin.Context) {
+	db := database.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database not initialized"})
+		return
+	}
+
+	type row struct {
+		ID              string
+		CreatedAt       time.Time
+		IsEmailVerified bool
+		LastActiveAt    *time.Time
+	}
+
+	var rows []row
+	if err := db.Model(&models.User{}).
+		Select("id, created_at, is_email_verified, last_active_at").
+		Order("created_at DESC").
+		Find(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	out := make([]userListItem, 0, len(rows))
+	for _, r := range rows {
+		isVerified := r.IsEmailVerified
+		var lastActive *string
+		if r.LastActiveAt != nil {
+			formatted := r.LastActiveAt.Format(time.RFC3339)
+			lastActive = &formatted
+		}
+		out = append(out, userListItem{
+			ID:           r.ID,
+			CreatedAt:    r.CreatedAt.Format(time.RFC3339),
+			IsVerified:   &isVerified,
+			LastActiveAt: lastActive,
+		})
+	}
+
+	c.JSON(http.StatusOK, out)
 }
