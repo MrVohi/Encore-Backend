@@ -13,6 +13,7 @@ import (
 func NewRouter(frontendURL string, artistHandler *artist.Handler) *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.New(middleware.CORS(frontendURL)))
+	r.Static("/uploads", "./uploads")
 
 	api := r.Group("/api")
 	// register artist routes

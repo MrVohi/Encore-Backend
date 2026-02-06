@@ -101,13 +101,15 @@ func (s *AuthService) VerifyRecaptcha(token string) (bool, error) {
 }
 
 func sanitizeUsername(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
+	s = strings.TrimSpace(s)
 
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
 			b.WriteRune(r)
 		case r >= '0' && r <= '9':
 			b.WriteRune(r)
@@ -136,7 +138,7 @@ func baseFromEmail(email string) string {
 func usernameAvailable(db *gorm.DB, username string) (bool, error) {
 	var u models.User
 	err := db.Select("id").
-		Where("username = ?", username).
+		Where("LOWER(username) = LOWER(?)", username).
 		First(&u).Error
 
 	if err == nil {
@@ -454,6 +456,7 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 				Username:        username,
 				FirstName:       googleUser.GivenName,
 				LastName:        googleUser.FamilyName,
+				AvatarURL:       googleUser.Picture,
 				GoogleID:        &gid,
 				IsEmailVerified: googleUser.VerifiedEmail,
 				Provider:        "google",
@@ -472,6 +475,24 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 			gid := googleUser.ID
 			user.GoogleID = &gid
 			user.Provider = "google"
+		}
+		// backfill missing username/avatar for existing users
+		needsUpdate := false
+		if strings.TrimSpace(user.Username) == "" {
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    googleUser.Email,
+				Username: googleUser.GivenName,
+			})
+			if err == nil && username != "" {
+				user.Username = username
+				needsUpdate = true
+			}
+		}
+		if strings.TrimSpace(user.AvatarURL) == "" && googleUser.Picture != "" {
+			user.AvatarURL = googleUser.Picture
+			needsUpdate = true
+		}
+		if needsUpdate {
 			db.Save(&user)
 		}
 	}
@@ -536,4 +557,39 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 		RefreshToken: refreshToken,
 		User:         &user,
 	}, nil
+}
+
+func BackfillGoogleUsers() {
+	db := database.GetDB()
+
+	var users []models.User
+	if err := db.Where("provider = ?", "google").
+		Where("username = '' OR username IS NULL").
+		Find(&users).Error; err != nil {
+		return
+	}
+
+	for _, user := range users {
+		updated := false
+
+		local := user.Email
+		if at := strings.Index(user.Email, "@"); at > 0 {
+			local = user.Email[:at]
+		}
+
+		if strings.TrimSpace(user.Username) == "" {
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    user.Email,
+				Username: local,
+			})
+			if err == nil && username != "" {
+				user.Username = username
+				updated = true
+			}
+		}
+
+		if updated {
+			db.Save(&user)
+		}
+	}
 }

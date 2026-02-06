@@ -9,6 +9,7 @@ import (
 // RegisterRoutes registers auth endpoints under /api/auth and protected routes.
 func RegisterRoutes(api *gin.RouterGroup) {
 	authHandler := NewAuthHandler()
+	BackfillGoogleUsers()
 
 	authGroup := api.Group("/auth")
 	{
@@ -28,6 +29,10 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	protected.Use(middleware.AuthMiddleware())
 	{
 		protected.GET("/me", authHandler.GetCurrentUser)
+		protected.PUT("/profile", authHandler.UpdateProfile)
+		protected.POST("/password", authHandler.ChangePassword)
+		protected.POST("/avatar", authHandler.UploadAvatar)
+		protected.DELETE("/avatar", authHandler.DeleteAvatar)
 		protected.POST("/logout", func(c *gin.Context) {
 			c.JSON(200, gin.H{"message": "logged out"})
 		})

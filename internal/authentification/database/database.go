@@ -33,6 +33,8 @@ func Connect() {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
+	DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))")
+
 	log.Println("Database migrated successfully")
 }
 
