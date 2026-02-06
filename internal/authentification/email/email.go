@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"log"
 	"os"
 	"strconv"
 
@@ -34,6 +35,8 @@ func NewEmailService() *EmailService {
 func (s *EmailService) SendVerificationEmail(to, token string) error {
 	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", os.Getenv("FRONTEND_URL"), token)
 
+	log.Printf("email: sending verification to=%s url=%s", to, verifyURL)
+
 	tmpl := `
 <!DOCTYPE html>
 <html>
@@ -53,12 +56,12 @@ func (s *EmailService) SendVerificationEmail(to, token string) error {
 </head>
 <body>
     <div class="container">
-        <h2>Vérifiez votre adresse e-mail</h2>
-        <p>Merci de vous être inscrit ! Veuillez cliquer sur le bouton ci-dessous pour vérifier votre adresse e-mail :</p>
-        <p><a href="{{.URL}}" class="button">Vérifier mon e-mail</a></p>
-        <p>Ou copiez ce lien dans votre navigateur :</p>
+        <h2>Verify your email address</h2>
+        <p>Thanks for signing up! Please click the button below to verify your email address:</p>
+        <p><a href="{{.URL}}" class="button">Verify my email</a></p>
+        <p>Or copy this link into your browser:</p>
         <p>{{.URL}}</p>
-        <p>Ce lien expirera dans 24 heures.</p>
+        <p>This link will expire in 24 hours.</p>
     </div>
 </body>
 </html>
@@ -78,14 +81,22 @@ func (s *EmailService) SendVerificationEmail(to, token string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", s.from)
 	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Vérifiez votre adresse e-mail")
+	m.SetHeader("Subject", "Verify your email address")
 	m.SetBody("text/html", body.String())
 
-	return s.dialer.DialAndSend(m)
+	if err := s.dialer.DialAndSend(m); err != nil {
+		log.Printf("email: verification send failed to=%s err=%v", to, err)
+		return err
+	}
+
+	log.Printf("email: verification sent to=%s", to)
+	return nil
 }
 
 func (s *EmailService) SendPasswordResetEmail(to, token string) error {
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", os.Getenv("FRONTEND_URL"), token)
+
+	log.Printf("email: sending reset to=%s url=%s", to, resetURL)
 
 	tmpl := `
 <!DOCTYPE html>
@@ -106,13 +117,13 @@ func (s *EmailService) SendPasswordResetEmail(to, token string) error {
 </head>
 <body>
     <div class="container">
-        <h2>Réinitialisation de mot de passe</h2>
-        <p>Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le bouton ci-dessous :</p>
-        <p><a href="{{.URL}}" class="button">Réinitialiser mon mot de passe</a></p>
-        <p>Ou copiez ce lien dans votre navigateur :</p>
+        <h2>Password reset</h2>
+        <p>You requested a password reset. Click the button below:</p>
+        <p><a href="{{.URL}}" class="button">Reset my password</a></p>
+        <p>Or copy this link into your browser:</p>
         <p>{{.URL}}</p>
-        <p>Ce lien expirera dans 1 heure.</p>
-        <p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet e-mail.</p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you did not request this reset, ignore this email.</p>
     </div>
 </body>
 </html>
@@ -132,8 +143,14 @@ func (s *EmailService) SendPasswordResetEmail(to, token string) error {
 	m := gomail.NewMessage()
 	m.SetHeader("From", s.from)
 	m.SetHeader("To", to)
-	m.SetHeader("Subject", "Réinitialisation de votre mot de passe")
+	m.SetHeader("Subject", "Password reset request")
 	m.SetBody("text/html", body.String())
 
-	return s.dialer.DialAndSend(m)
+	if err := s.dialer.DialAndSend(m); err != nil {
+		log.Printf("email: reset send failed to=%s err=%v", to, err)
+		return err
+	}
+
+	log.Printf("email: reset sent to=%s", to)
+	return nil
 }

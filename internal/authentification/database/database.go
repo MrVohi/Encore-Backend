@@ -1,10 +1,9 @@
 package database
 
 import (
+	"groupie-tracker/internal/authentification/models"
 	"log"
 	"os"
-
-	"groupie-tracker/internal/authentification/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -33,6 +32,8 @@ func Connect() {
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
+
+	DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))")
 
 	log.Println("Database migrated successfully")
 }

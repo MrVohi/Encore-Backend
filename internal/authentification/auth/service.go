@@ -97,23 +97,19 @@ func (s *AuthService) VerifyRecaptcha(token string) (bool, error) {
 		return false, fmt.Errorf("recaptcha failed: %v", result.ErrorCodes)
 	}
 
-	// Optional: lock to dev/prod hostnames
-	// if result.Hostname != "localhost" && result.Hostname != "yourdomain.com" {
-	// 	return false, fmt.Errorf("recaptcha hostname mismatch: %s", result.Hostname)
-	// }
-
 	return true, nil
 }
 
 func sanitizeUsername(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
+	s = strings.TrimSpace(s)
 
-	// keep only [a-z0-9._-]
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
 		switch {
 		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
 			b.WriteRune(r)
 		case r >= '0' && r <= '9':
 			b.WriteRune(r)
@@ -142,7 +138,7 @@ func baseFromEmail(email string) string {
 func usernameAvailable(db *gorm.DB, username string) (bool, error) {
 	var u models.User
 	err := db.Select("id").
-		Where("username = ?", username).
+		Where("LOWER(username) = LOWER(?)", username).
 		First(&u).Error
 
 	if err == nil {
@@ -174,7 +170,6 @@ func generateUniqueUsername(db *gorm.DB, input RegisterInput) (string, error) {
 	for i := 2; i <= 9999; i++ {
 		candidate := fmt.Sprintf("%s-%d", base, i)
 
-		// optional: enforce max length (example: 32)
 		if len(candidate) > 32 {
 			suffix := fmt.Sprintf("-%d", i)
 			maxBase := 32 - len(suffix)
@@ -201,9 +196,6 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	db := database.GetDB().Debug()
 
 	isHuman, err := s.VerifyRecaptcha(input.RecaptchaToken)
-	/* if err != nil || !isHuman {
-		return nil, errors.New("échec de la vérification reCAPTCHA")
-	} */
 	if err != nil || !isHuman {
 		return nil, fmt.Errorf("recaptcha: %v", err)
 	}
@@ -211,7 +203,7 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	var existingUser models.User
 	result := db.Where("email = ?", input.Email).First(&existingUser)
 	if result.Error == nil {
-		return nil, errors.New("cet e-mail est déjà utilisé")
+		return nil, errors.New("this email is already in use")
 	}
 
 	hashedPassword, err := utils.HashPassword(input.Password)
@@ -230,14 +222,16 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	}
 
 	user := models.User{
-		Email:        input.Email,
-		PasswordHash: hashedPassword,
-		Name:         input.FirstName + " " + input.LastName,
-		FirstName:    input.FirstName,
-		LastName:     input.LastName,
-		Provider:     "local",
-		Username:     username,
-		LastActiveAt: func() *time.Time { t := time.Now(); return &t }(),
+		Email:            input.Email,
+		PasswordHash:     hashedPassword,
+		Name:             input.FirstName + " " + input.LastName,
+		FirstName:        input.FirstName,
+		LastName:         input.LastName,
+		Provider:         "local",
+		Username:         username,
+		IsEmailVerified:  false,
+		EmailVerifyToken: verifyToken,
+		LastActiveAt:     func() *time.Time { t := time.Now(); return &t }(),
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -281,13 +275,13 @@ func (s *AuthService) Login(input LoginInput) (*AuthResponse, error) {
 	var user models.User
 	if err := db.Where("email = ?", input.Email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("e-mail ou mot de passe incorrect")
+			return nil, errors.New("email or password incorrect")
 		}
 		return nil, err
 	}
 
 	if !utils.CheckPassword(input.Password, user.PasswordHash) {
-		return nil, errors.New("e-mail ou mot de passe incorrect")
+		return nil, errors.New("email or password incorrect")
 	}
 
 	now := time.Now()
@@ -324,13 +318,40 @@ func (s *AuthService) VerifyEmail(token string) error {
 
 	var user models.User
 	if err := db.Where("email_verify_token = ?", token).First(&user).Error; err != nil {
-		return errors.New("token invalide ou expiré")
+		return errors.New("invalid or expired token")
 	}
 
 	user.IsEmailVerified = true
 	user.EmailVerifyToken = ""
 
 	return db.Save(&user).Error
+}
+
+func (s *AuthService) ResendVerification(email string) error {
+	db := database.GetDB()
+
+	var user models.User
+	if err := db.Where("email = ?", email).First(&user).Error; err != nil {
+		return nil
+	}
+
+	if user.IsEmailVerified {
+		return nil
+	}
+
+	verifyToken, err := utils.GenerateRandomToken(32)
+	if err != nil {
+		return err
+	}
+
+	user.EmailVerifyToken = verifyToken
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	go s.emailService.SendVerificationEmail(user.Email, verifyToken)
+
+	return nil
 }
 
 func (s *AuthService) RequestPasswordReset(email string) error {
@@ -364,11 +385,11 @@ func (s *AuthService) ResetPassword(token, newPassword string) error {
 
 	var user models.User
 	if err := db.Where("reset_password_token = ?", token).First(&user).Error; err != nil {
-		return errors.New("token invalide ou expiré")
+		return errors.New("invalid or expired token")
 	}
 
 	if user.ResetPasswordExp == nil || time.Now().After(*user.ResetPasswordExp) {
-		return errors.New("token expiré")
+		return errors.New("token expired")
 	}
 
 	hashedPassword, err := utils.HashPassword(newPassword)
@@ -421,11 +442,29 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			// googleUser.ID is a string; models.User.GoogleID is *string, store a pointer
+			gid := googleUser.ID
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    googleUser.Email,
+				Username: googleUser.GivenName,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)
+			if fullName == "" {
+				fullName = googleUser.Email
+			}
+
 			user = models.User{
 				Email:           googleUser.Email,
+				Name:            fullName,
+				Username:        username,
 				FirstName:       googleUser.GivenName,
 				LastName:        googleUser.FamilyName,
-				GoogleID:        googleUser.ID,
+				AvatarURL:       googleUser.Picture,
+				GoogleID:        &gid,
 				IsEmailVerified: googleUser.VerifiedEmail,
 				Provider:        "google",
 				PasswordHash:    uuid.New().String(),
@@ -439,9 +478,29 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 			return nil, result.Error
 		}
 	} else {
-		if user.GoogleID == "" {
-			user.GoogleID = googleUser.ID
+		// user.GoogleID is a *string; handle nil or empty
+		if user.GoogleID == nil || *user.GoogleID == "" {
+			gid := googleUser.ID
+			user.GoogleID = &gid
 			user.Provider = "google"
+		}
+		// backfill missing username/avatar for existing users
+		needsUpdate := false
+		if strings.TrimSpace(user.Username) == "" {
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    googleUser.Email,
+				Username: googleUser.GivenName,
+			})
+			if err == nil && username != "" {
+				user.Username = username
+				needsUpdate = true
+			}
+		}
+		if strings.TrimSpace(user.AvatarURL) == "" && googleUser.Picture != "" {
+			user.AvatarURL = googleUser.Picture
+			needsUpdate = true
+		}
+		if needsUpdate {
 			db.Save(&user)
 		}
 	}
@@ -477,16 +536,16 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 
 	claims, err := utils.ValidateToken(refreshToken)
 	if err != nil {
-		return nil, errors.New("token invalide")
+		return nil, errors.New("invalid token")
 	}
 
 	var tokenRecord models.RefreshToken
 	if err := db.Where("token = ? AND user_id = ?", refreshToken, claims.UserID).First(&tokenRecord).Error; err != nil {
-		return nil, errors.New("token invalide")
+		return nil, errors.New("invalid token")
 	}
 
 	if time.Now().After(tokenRecord.ExpiresAt) {
-		return nil, errors.New("token expiré")
+		return nil, errors.New("token expired")
 	}
 
 	var user models.User
@@ -509,4 +568,39 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 		RefreshToken: refreshToken,
 		User:         &user,
 	}, nil
+}
+
+func BackfillGoogleUsers() {
+	db := database.GetDB()
+
+	var users []models.User
+	if err := db.Where("provider = ?", "google").
+		Where("username = '' OR username IS NULL").
+		Find(&users).Error; err != nil {
+		return
+	}
+
+	for _, user := range users {
+		updated := false
+
+		local := user.Email
+		if at := strings.Index(user.Email, "@"); at > 0 {
+			local = user.Email[:at]
+		}
+
+		if strings.TrimSpace(user.Username) == "" {
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    user.Email,
+				Username: local,
+			})
+			if err == nil && username != "" {
+				user.Username = username
+				updated = true
+			}
+		}
+
+		if updated {
+			db.Save(&user)
+		}
+	}
 }
