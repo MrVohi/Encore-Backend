@@ -220,13 +220,15 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 	}
 
 	user := models.User{
-		Email:        input.Email,
-		PasswordHash: hashedPassword,
-		Name:         input.FirstName + " " + input.LastName,
-		FirstName:    input.FirstName,
-		LastName:     input.LastName,
-		Provider:     "local",
-		Username:     username,
+		Email:            input.Email,
+		PasswordHash:     hashedPassword,
+		Name:             input.FirstName + " " + input.LastName,
+		FirstName:        input.FirstName,
+		LastName:         input.LastName,
+		Provider:         "local",
+		Username:         username,
+		IsEmailVerified:  false,
+		EmailVerifyToken: verifyToken,
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -314,6 +316,33 @@ func (s *AuthService) VerifyEmail(token string) error {
 	user.EmailVerifyToken = ""
 
 	return db.Save(&user).Error
+}
+
+func (s *AuthService) ResendVerification(email string) error {
+	db := database.GetDB()
+
+	var user models.User
+	if err := db.Where("email = ?", email).First(&user).Error; err != nil {
+		return nil
+	}
+
+	if user.IsEmailVerified {
+		return nil
+	}
+
+	verifyToken, err := utils.GenerateRandomToken(32)
+	if err != nil {
+		return err
+	}
+
+	user.EmailVerifyToken = verifyToken
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	go s.emailService.SendVerificationEmail(user.Email, verifyToken)
+
+	return nil
 }
 
 func (s *AuthService) RequestPasswordReset(email string) error {
@@ -406,8 +435,23 @@ func (s *AuthService) GoogleCallback(code string) (*AuthResponse, error) {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			// googleUser.ID is a string; models.User.GoogleID is *string, store a pointer
 			gid := googleUser.ID
+			username, err := generateUniqueUsername(db, RegisterInput{
+				Email:    googleUser.Email,
+				Username: googleUser.GivenName,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			fullName := strings.TrimSpace(googleUser.GivenName + " " + googleUser.FamilyName)
+			if fullName == "" {
+				fullName = googleUser.Email
+			}
+
 			user = models.User{
 				Email:           googleUser.Email,
+				Name:            fullName,
+				Username:        username,
 				FirstName:       googleUser.GivenName,
 				LastName:        googleUser.FamilyName,
 				GoogleID:        &gid,
@@ -463,7 +507,7 @@ func (s *AuthService) RefreshAccessToken(refreshToken string) (*AuthResponse, er
 
 	claims, err := utils.ValidateToken(refreshToken)
 	if err != nil {
-		return nil, errors.New("token invalide")
+		return nil, errors.New("invalid token")
 	}
 
 	var tokenRecord models.RefreshToken

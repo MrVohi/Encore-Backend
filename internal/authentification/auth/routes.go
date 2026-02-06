@@ -15,6 +15,12 @@ func RegisterRoutes(api *gin.RouterGroup) {
 		authGroup.POST("/register", authHandler.Register)
 		authGroup.POST("/login", authHandler.Login)
 		authGroup.POST("/refresh", authHandler.RefreshToken)
+		authGroup.GET("/google", authHandler.GoogleLogin)
+		authGroup.GET("/google/callback", authHandler.GoogleCallback)
+		authGroup.POST("/forgot-password", authHandler.RequestPasswordReset)
+		authGroup.POST("/reset-password", authHandler.ResetPassword)
+		authGroup.GET("/verify-email", authHandler.VerifyEmail)
+		authGroup.POST("/resend-verification", authHandler.ResendVerification)
 	}
 
 	// Keep existing /api/auth/me for backwards compatibility

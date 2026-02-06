@@ -2,6 +2,8 @@ package auth
 
 import (
 	"net/http"
+	"net/mail"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,7 +53,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Token manquant"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
 		return
 	}
 
@@ -64,9 +66,10 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully"})
 }
 
-func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
+func (h *AuthHandler) ResendVerification(c *gin.Context) {
 	var input struct {
-		Email string `json:"mail" binding:"required,mail"`
+		Email string `json:"email"`
+		Mail  string `json:"mail"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -74,7 +77,49 @@ func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
 		return
 	}
 
-	err := h.service.RequestPasswordReset(input.Email)
+	email := strings.TrimSpace(input.Email)
+	if email == "" {
+		email = strings.TrimSpace(input.Mail)
+	}
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email"})
+		return
+	}
+
+	_ = h.service.ResendVerification(email)
+
+	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a verification link has been sent"})
+}
+
+func (h *AuthHandler) RequestPasswordReset(c *gin.Context) {
+	var input struct {
+		Email string `json:"email"`
+		Mail  string `json:"mail"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	email := strings.TrimSpace(input.Email)
+	if email == "" {
+		email = strings.TrimSpace(input.Mail)
+	}
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+	if _, err := mail.ParseAddress(email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid email"})
+		return
+	}
+
+	err := h.service.RequestPasswordReset(email)
 	if err != nil {
 
 		c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a reset link has been sent"})
@@ -117,7 +162,7 @@ func (h *AuthHandler) GoogleLogin(c *gin.Context) {
 func (h *AuthHandler) GoogleCallback(c *gin.Context) {
 	code := c.Query("code")
 	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Code manquant"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code"})
 		return
 	}
 

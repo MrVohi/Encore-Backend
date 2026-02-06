@@ -21,14 +21,14 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Erreur chargement config:", err)
+		log.Fatal("Failed to load config:", err)
 	}
 
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("Erreur connexion DB Artistes:", err)
+		log.Fatal("Failed to connect to artists database:", err)
 	}
 	defer pool.Close()
 

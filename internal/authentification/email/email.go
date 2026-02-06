@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"log"
 	"os"
 	"strconv"
 
@@ -33,6 +34,8 @@ func NewEmailService() *EmailService {
 
 func (s *EmailService) SendVerificationEmail(to, token string) error {
 	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", os.Getenv("FRONTEND_URL"), token)
+
+	log.Printf("email: sending verification to=%s url=%s", to, verifyURL)
 
 	tmpl := `
 <!DOCTYPE html>
@@ -81,11 +84,19 @@ func (s *EmailService) SendVerificationEmail(to, token string) error {
 	m.SetHeader("Subject", "Verify your email address")
 	m.SetBody("text/html", body.String())
 
-	return s.dialer.DialAndSend(m)
+	if err := s.dialer.DialAndSend(m); err != nil {
+		log.Printf("email: verification send failed to=%s err=%v", to, err)
+		return err
+	}
+
+	log.Printf("email: verification sent to=%s", to)
+	return nil
 }
 
 func (s *EmailService) SendPasswordResetEmail(to, token string) error {
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", os.Getenv("FRONTEND_URL"), token)
+
+	log.Printf("email: sending reset to=%s url=%s", to, resetURL)
 
 	tmpl := `
 <!DOCTYPE html>
@@ -135,5 +146,11 @@ func (s *EmailService) SendPasswordResetEmail(to, token string) error {
 	m.SetHeader("Subject", "Password reset request")
 	m.SetBody("text/html", body.String())
 
-	return s.dialer.DialAndSend(m)
+	if err := s.dialer.DialAndSend(m); err != nil {
+		log.Printf("email: reset send failed to=%s err=%v", to, err)
+		return err
+	}
+
+	log.Printf("email: reset sent to=%s", to)
+	return nil
 }
