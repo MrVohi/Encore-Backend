@@ -44,3 +44,8 @@ func (a *Artist) ResolveURLs(baseURL string) {
 		a.PreviewURL = *a.LegacyPreviewURL
 	}
 }
+
+type SearchResult struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

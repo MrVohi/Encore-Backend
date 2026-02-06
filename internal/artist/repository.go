@@ -2,6 +2,7 @@ package artist
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,10 @@ type Repository struct {
 
 func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
+}
+
+func normalizeQuery(q string) string {
+	return strings.Join(strings.Fields(q), " ")
 }
 
 func (r *Repository) List(ctx context.Context) ([]Artist, error) {
@@ -142,4 +147,42 @@ func (r *Repository) DeleteByID(ctx context.Context, id string) error {
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+// Search artists by name (case-insensitive, collapses whitespace)
+func (r *Repository) Search(ctx context.Context, q string, limit int) ([]SearchResult, error) {
+	q = normalizeQuery(q)
+	if len(q) < 2 {
+		return []SearchResult{}, nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name
+		FROM artists
+		WHERE lower(regexp_replace(name, '\\s+', ' ', 'g'))
+		      LIKE '%' || lower($1) || '%'
+		ORDER BY name
+		LIMIT $2
+	`, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := make([]SearchResult, 0, limit)
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+
+	return results, rows.Err()
 }

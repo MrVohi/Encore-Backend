@@ -12,6 +12,7 @@ import (
 	"groupie-tracker/internal/db"
 	httpserver "groupie-tracker/internal/http"
 	"groupie-tracker/internal/media"
+	"groupie-tracker/internal/search"
 )
 
 func main() {
@@ -45,7 +46,10 @@ func main() {
 	artistHandler := artist.NewHandler(artistRepo, artistService)
 
 	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler)
-	r.Static("/uploads", "./uploads")
+	api := r.Group("/api")
+	searchRepo := search.NewRepository(pool)
+	searchHandler := search.NewHandler(searchRepo)
+	searchHandler.RegisterRoutes(api)
 
 	log.Printf("Server starting on %s", cfg.Addr)
 	log.Fatal(r.Run(cfg.Addr))
