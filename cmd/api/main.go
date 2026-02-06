@@ -9,8 +9,10 @@ import (
 
 	"groupie-tracker/internal/album"
 	"groupie-tracker/internal/artist"
+	"groupie-tracker/internal/concert"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
+	"groupie-tracker/internal/geo"
 	httpserver "groupie-tracker/internal/http"
 	"groupie-tracker/internal/media"
 	"groupie-tracker/internal/search"
@@ -53,7 +55,14 @@ func main() {
 	trackRepo := track.NewRepository(pool)
 	trackHandler := track.NewHandler(trackRepo)
 
-	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler)
+	concertRepo := concert.NewRepository(pool)
+	concertHandler := concert.NewHandler(concertRepo)
+
+	geoRepo := geo.NewRepository(pool)
+	geoService := geo.NewService(geoRepo, geo.DummyGeocoder{})
+	geoHandler := geo.NewHandler(geoRepo, geoService)
+
+	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler)
 	api := r.Group("/api")
 	searchRepo := search.NewRepository(pool)
 	searchHandler := search.NewHandler(searchRepo)
