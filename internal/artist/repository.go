@@ -20,16 +20,22 @@ func normalizeQuery(q string) string {
 	return strings.Join(strings.Fields(q), " ")
 }
 
-func (r *Repository) List(ctx context.Context) ([]Artist, error) {
+func (r *Repository) List(ctx context.Context, userID *string) ([]Artist, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT a.id, a.name, a.genre, a.image_url, a.preview_url,
 			a.artwork_asset_id, a.preview_asset_id, a.created_at,
-			art.object_key, prev.object_key
+			art.object_key, prev.object_key,
+			(SELECT COUNT(*) FROM follow f WHERE f.artist_id = a.id) AS followers_count,
+			CASE WHEN $1::uuid IS NULL THEN NULL
+				ELSE EXISTS(
+					SELECT 1 FROM follow f WHERE f.artist_id = a.id AND f.user_id = $1
+				)
+			END AS is_followed
 		FROM artists a
 		LEFT JOIN media_assets art ON art.id = a.artwork_asset_id
 		LEFT JOIN media_assets prev ON prev.id = a.preview_asset_id
 		ORDER BY a.created_at DESC
-	`)
+	`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +55,8 @@ func (r *Repository) List(ctx context.Context) ([]Artist, error) {
 			&a.CreatedAt,
 			&a.ArtworkObjectKey,
 			&a.PreviewObjectKey,
+			&a.FollowersCount,
+			&a.IsFollowed,
 		); err != nil {
 			return nil, err
 		}
@@ -57,17 +65,23 @@ func (r *Repository) List(ctx context.Context) ([]Artist, error) {
 	return out, rows.Err()
 }
 
-func (r *Repository) GetByID(ctx context.Context, id string) (Artist, error) {
+func (r *Repository) GetByID(ctx context.Context, id string, userID *string) (Artist, error) {
 	var a Artist
 	err := r.pool.QueryRow(ctx, `
 		SELECT a.id, a.name, a.genre, a.image_url, a.preview_url,
 			a.artwork_asset_id, a.preview_asset_id, a.created_at,
-			art.object_key, prev.object_key
+			art.object_key, prev.object_key,
+			(SELECT COUNT(*) FROM follow f WHERE f.artist_id = a.id) AS followers_count,
+			CASE WHEN $2::uuid IS NULL THEN NULL
+				ELSE EXISTS(
+					SELECT 1 FROM follow f WHERE f.artist_id = a.id AND f.user_id = $2
+				)
+			END AS is_followed
 		FROM artists a
 		LEFT JOIN media_assets art ON art.id = a.artwork_asset_id
 		LEFT JOIN media_assets prev ON prev.id = a.preview_asset_id
 		WHERE a.id = $1
-	`, id).Scan(
+	`, id, userID).Scan(
 		&a.ID,
 		&a.Name,
 		&a.Genre,
@@ -78,6 +92,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (Artist, error) {
 		&a.CreatedAt,
 		&a.ArtworkObjectKey,
 		&a.PreviewObjectKey,
+		&a.FollowersCount,
+		&a.IsFollowed,
 	)
 
 	return a, err

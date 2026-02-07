@@ -12,9 +12,11 @@ import (
 	"groupie-tracker/internal/concert"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
+	"groupie-tracker/internal/follow"
 	"groupie-tracker/internal/geo"
 	httpserver "groupie-tracker/internal/http"
 	"groupie-tracker/internal/media"
+	"groupie-tracker/internal/notifications"
 	"groupie-tracker/internal/search"
 	"groupie-tracker/internal/track"
 )
@@ -55,14 +57,22 @@ func main() {
 	trackRepo := track.NewRepository(pool)
 	trackHandler := track.NewHandler(trackRepo)
 
-	concertRepo := concert.NewRepository(pool)
-	concertHandler := concert.NewHandler(concertRepo)
-
 	geoRepo := geo.NewRepository(pool)
 	geoService := geo.NewService(geoRepo, geo.DummyGeocoder{})
 	geoHandler := geo.NewHandler(geoRepo, geoService)
 
-	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler)
+	followRepo := follow.NewRepository(pool)
+	followHandler := follow.NewHandler(followRepo)
+
+	notifyRepo := notifications.NewRepository(pool)
+	notifySender := notifications.NewSMTPSenderFromEnv()
+	notifyService := notifications.NewService(notifyRepo, notifySender, cfg.FrontendURL)
+	notifyService.Start(ctx)
+
+	concertRepo := concert.NewRepository(pool)
+	concertHandler := concert.NewHandler(concertRepo, notifyService)
+
+	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler, followHandler)
 	api := r.Group("/api")
 	searchRepo := search.NewRepository(pool)
 	searchHandler := search.NewHandler(searchRepo)

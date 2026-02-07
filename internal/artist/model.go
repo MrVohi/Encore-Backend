@@ -19,6 +19,9 @@ type Artist struct {
 	PreviewAssetID   *string `json:"-"`
 	ArtworkObjectKey *string `json:"-"`
 	PreviewObjectKey *string `json:"-"`
+
+	FollowersCount int   `json:"followers_count"`
+	IsFollowed     *bool `json:"is_followed,omitempty"`
 }
 
 // For POST body (so clients can't set ID/CreatedAt)

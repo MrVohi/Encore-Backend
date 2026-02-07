@@ -9,12 +9,13 @@ import (
 	auth "groupie-tracker/internal/authentification/auth"
 	authdb "groupie-tracker/internal/authentification/database"
 	"groupie-tracker/internal/concert"
+	"groupie-tracker/internal/follow"
 	"groupie-tracker/internal/geo"
 	"groupie-tracker/internal/http/middleware"
 	"groupie-tracker/internal/track"
 )
 
-func NewRouter(frontendURL string, artistHandler *artist.Handler, albumHandler *album.Handler, trackHandler *track.Handler, concertHandler *concert.Handler, geoHandler *geo.Handler) *gin.Engine {
+func NewRouter(frontendURL string, artistHandler *artist.Handler, albumHandler *album.Handler, trackHandler *track.Handler, concertHandler *concert.Handler, geoHandler *geo.Handler, followHandler *follow.Handler) *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.New(middleware.CORS(frontendURL)))
 	r.Static("/uploads", "./uploads")
@@ -26,6 +27,7 @@ func NewRouter(frontendURL string, artistHandler *artist.Handler, albumHandler *
 	trackHandler.RegisterRoutes(api)
 	concertHandler.RegisterRoutes(api)
 	geoHandler.RegisterRoutes(api)
+	followHandler.RegisterRoutes(api)
 
 	// register health route
 	api.GET("/health", func(c *gin.Context) {

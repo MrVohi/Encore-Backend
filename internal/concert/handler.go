@@ -2,17 +2,25 @@ package concert
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+
+	"groupie-tracker/internal/notifications"
 )
 
-type Handler struct {
-	repo *Repository
+type Notifier interface {
+	EnqueueConcert(job notifications.ConcertJob)
 }
 
-func NewHandler(repo *Repository) *Handler {
-	return &Handler{repo: repo}
+type Handler struct {
+	repo     *Repository
+	notifier Notifier
+}
+
+func NewHandler(repo *Repository, notifier Notifier) *Handler {
+	return &Handler{repo: repo, notifier: notifier}
 }
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -23,16 +31,16 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *Handler) list(c *gin.Context) {
-	albums, err := h.repo.List(c.Request.Context())
+	concerts, err := h.repo.List(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, albums)
+	c.JSON(http.StatusOK, concerts)
 }
 
 func (h *Handler) listArtistConcerts(c *gin.Context) {
-	concerts, err := h.repo.listArtistConcerts(c.Request.Context(), c.Param("id"))
+	concerts, err := h.repo.ListByArtist(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -54,17 +62,48 @@ func (h *Handler) getByID(c *gin.Context) {
 }
 
 func (h *Handler) create(c *gin.Context) {
+	artistID := c.Param("id")
+	exists, err := h.repo.ArtistExists(c.Request.Context(), artistID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "artist not found"})
+		return
+	}
+
 	var req CreateConcertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	a, err := h.repo.Create(c.Request.Context(), req, c.Param("id"))
+	created, err := h.repo.Create(c.Request.Context(), req, artistID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, a)
+	if h.notifier != nil {
+		artistName, err := h.repo.ArtistName(c.Request.Context(), artistID)
+		if err == nil {
+			when, parseErr := time.Parse("2006-01-02 15:04:05", created.When)
+			if parseErr == nil {
+				h.notifier.EnqueueConcert(notifications.ConcertJob{
+					ConcertID:  created.ID,
+					ArtistID:   artistID,
+					ArtistName: artistName,
+					When:       when,
+					City:       created.City,
+					Country:    created.Country,
+				})
+			}
+		} else if err != nil && err != pgx.ErrNoRows {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusCreated, created)
 }
