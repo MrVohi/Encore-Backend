@@ -57,7 +57,16 @@ create table concerts (
 create table follow (
   user_id uuid not null references users(id) on delete cascade,
   artist_id uuid not null references artists(id) on delete cascade,
+  created_at timestamptz not null default now(),
   primary key (user_id, artist_id)
+);
+
+-- CONCERT NOTIFICATIONS (idempotency)
+create table concert_notifications (
+  concert_id uuid not null references concerts(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  sent_at timestamptz not null default now(),
+  primary key (concert_id, user_id)
 );
 
 -- ORDERS ("order" is reserved, so use orders)

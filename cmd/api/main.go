@@ -8,9 +8,12 @@ import (
 	"github.com/joho/godotenv"
 
 	"groupie-tracker/internal/artist"
+	"groupie-tracker/internal/concert"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
+	"groupie-tracker/internal/follow"
 	httpserver "groupie-tracker/internal/http"
+	"groupie-tracker/internal/notifications"
 )
 
 func main() {
@@ -40,7 +43,18 @@ func main() {
 	artistRepo := artist.NewRepository(pool)
 	artistHandler := artist.NewHandler(artistRepo)
 
-	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler)
+	followRepo := follow.NewRepository(pool)
+	followHandler := follow.NewHandler(followRepo)
+
+	notifyRepo := notifications.NewRepository(pool)
+	notifySender := notifications.NewSMTPSenderFromEnv()
+	notifyService := notifications.NewService(notifyRepo, notifySender, cfg.FrontendURL)
+	notifyService.Start(ctx)
+
+	concertRepo := concert.NewRepository(pool)
+	concertHandler := concert.NewHandler(concertRepo, notifyService)
+
+	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, followHandler, concertHandler)
 
 	log.Printf("Server starting on %s", cfg.Addr)
 	log.Fatal(r.Run(cfg.Addr))

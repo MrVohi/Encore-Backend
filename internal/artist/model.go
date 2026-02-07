@@ -9,6 +9,9 @@ type Artist struct {
 	ImageURL   string    `json:"image_url"`
 	PreviewURL string    `json:"preview_url"`
 	CreatedAt  time.Time `json:"created_at"`
+
+	FollowersCount int   `json:"followers_count"`
+	IsFollowed     *bool `json:"is_followed,omitempty"`
 }
 
 // For POST body (so clients can't set ID/CreatedAt)

@@ -2,9 +2,12 @@ package artist
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+
+	"groupie-tracker/pkg/utils"
 )
 
 type Handler struct {
@@ -22,7 +25,8 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *Handler) list(c *gin.Context) {
-	artists, err := h.repo.List(c.Request.Context())
+	userID := optionalUserID(c)
+	artists, err := h.repo.List(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -31,7 +35,8 @@ func (h *Handler) list(c *gin.Context) {
 }
 
 func (h *Handler) getByID(c *gin.Context) {
-	a, err := h.repo.GetByID(c.Request.Context(), c.Param("id"))
+	userID := optionalUserID(c)
+	a, err := h.repo.GetByID(c.Request.Context(), c.Param("id"), userID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "artist not found"})
@@ -57,4 +62,24 @@ func (h *Handler) create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, a)
+}
+
+func optionalUserID(c *gin.Context) *string {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return nil
+	}
+
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return nil
+	}
+
+	claims, err := utils.ValidateToken(parts[1])
+	if err != nil || claims.UserID == "" {
+		return nil
+	}
+
+	id := claims.UserID
+	return &id
 }
