@@ -14,14 +14,16 @@ import (
 )
 
 type Handler struct {
-	repo    *Repository
-	service *Service
+	repo         *Repository
+	service      *Service
+	r2PublicBase string
 }
 
-func NewHandler(repo *Repository, service *Service) *Handler {
+func NewHandler(repo *Repository, service *Service, r2PublicBase string) *Handler {
 	return &Handler{
-		repo:    repo,
-		service: service,
+		repo:         repo,
+		service:      service,
+		r2PublicBase: r2PublicBase,
 	}
 }
 
@@ -197,7 +199,7 @@ func (h *Handler) resolveURLs(c *gin.Context, a *Artist) {
 	if host == "" {
 		host = "localhost:8080"
 	}
-	a.ResolveURLs(scheme + "://" + host)
+	a.ResolveURLs(scheme+"://"+host, h.r2PublicBase)
 }
 
 func optionalUserID(c *gin.Context) *string {

@@ -27,6 +27,7 @@ func (r *Repository) List(ctx context.Context, userID *string) ([]Artist, error)
 		SELECT a.id, a.name, a.genre, a.image_url, a.preview_url,
 			a.artwork_asset_id, a.preview_asset_id, a.created_at,
 			art.object_key, prev.object_key,
+			art.storage, prev.storage,
 			(SELECT COUNT(*) FROM follow f WHERE f.artist_id = a.id) AS followers_count,
 			CASE WHEN $1::uuid IS NULL THEN NULL
 				ELSE EXISTS(
@@ -57,6 +58,8 @@ func (r *Repository) List(ctx context.Context, userID *string) ([]Artist, error)
 			&a.CreatedAt,
 			&a.ArtworkObjectKey,
 			&a.PreviewObjectKey,
+			&a.ArtworkStorage,
+			&a.PreviewStorage,
 			&a.FollowersCount,
 			&a.IsFollowed,
 		); err != nil {
@@ -73,6 +76,7 @@ func (r *Repository) GetByID(ctx context.Context, id string, userID *string) (Ar
 		SELECT a.id, a.name, a.genre, a.image_url, a.preview_url,
 			a.artwork_asset_id, a.preview_asset_id, a.created_at,
 			art.object_key, prev.object_key,
+			art.storage, prev.storage,
 			(SELECT COUNT(*) FROM follow f WHERE f.artist_id = a.id) AS followers_count,
 			CASE WHEN $2::uuid IS NULL THEN NULL
 				ELSE EXISTS(
@@ -94,6 +98,8 @@ func (r *Repository) GetByID(ctx context.Context, id string, userID *string) (Ar
 		&a.CreatedAt,
 		&a.ArtworkObjectKey,
 		&a.PreviewObjectKey,
+		&a.ArtworkStorage,
+		&a.PreviewStorage,
 		&a.FollowersCount,
 		&a.IsFollowed,
 	)

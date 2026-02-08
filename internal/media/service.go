@@ -7,22 +7,22 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"groupie-tracker/internal/storage"
 	"groupie-tracker/pkg/utils"
 )
 
 var ErrInvalidMimeType = errors.New("invalid mime type")
 
 type Service struct {
-	repo      *Repository
-	uploadDir string
+	repo  *Repository
+	store storage.Driver
 }
 
-func NewService(repo *Repository, uploadDir string) *Service {
-	return &Service{repo: repo, uploadDir: uploadDir}
+func NewService(repo *Repository, store storage.Driver) *Service {
+	return &Service{repo: repo, store: store}
 }
 
 func (s *Service) SaveAsset(ctx context.Context, fileHeader *multipart.FileHeader, kind string, allowedPrefix string) (Asset, error) {
@@ -34,18 +34,13 @@ func (s *Service) SaveAsset(ctx context.Context, fileHeader *multipart.FileHeade
 		return Asset{}, fmt.Errorf("%w: %s", ErrInvalidMimeType, mimeType)
 	}
 
-	if err := os.MkdirAll(s.uploadDir, 0o755); err != nil {
-		return Asset{}, err
-	}
-
 	token, err := utils.GenerateRandomToken(16)
 	if err != nil {
 		return Asset{}, err
 	}
 
 	ext := filepath.Ext(fileHeader.Filename)
-	objectKey := token + ext
-	path := filepath.Join(s.uploadDir, objectKey)
+	objectKey := strings.TrimLeft(kind, "/") + "/" + token + ext
 
 	src, err := fileHeader.Open()
 	if err != nil {
@@ -53,27 +48,23 @@ func (s *Service) SaveAsset(ctx context.Context, fileHeader *multipart.FileHeade
 	}
 	defer src.Close()
 
-	dst, err := os.Create(path)
-	if err != nil {
+	cr := &countingReader{r: src}
+	if err := s.store.Put(ctx, objectKey, cr, mimeType); err != nil {
 		return Asset{}, err
 	}
-	defer dst.Close()
-
-	size, err := io.Copy(dst, src)
-	if err != nil {
-		_ = os.Remove(path)
-		return Asset{}, err
+	size := cr.n
+	if size == 0 && fileHeader.Size > 0 {
+		size = fileHeader.Size
 	}
 
 	created, err := s.repo.Create(ctx, Asset{
 		Kind:      kind,
-		Storage:   "local",
+		Storage:   s.store.Name(),
 		ObjectKey: objectKey,
 		MimeType:  mimeType,
 		SizeBytes: size,
 	})
 	if err != nil {
-		_ = os.Remove(path)
 		return Asset{}, err
 	}
 
@@ -98,8 +89,7 @@ func sniffMimeType(fileHeader *multipart.FileHeader) (string, error) {
 
 func (s *Service) DeleteAsset(ctx context.Context, assetID string, objectKey *string) error {
 	if objectKey != nil && *objectKey != "" {
-		path := filepath.Join(s.uploadDir, *objectKey)
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := s.store.Delete(ctx, *objectKey); err != nil {
 			return err
 		}
 	}
@@ -109,4 +99,15 @@ func (s *Service) DeleteAsset(ctx context.Context, assetID string, objectKey *st
 	}
 
 	return nil
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
