@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 
+	"groupie-tracker/internal/middleware"
 	"groupie-tracker/internal/notifications"
 )
 
@@ -27,7 +28,13 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/concerts", h.list)
 	rg.GET("/concerts/:id", h.getByID)
 	rg.GET("/artists/:id/concerts", h.listArtistConcerts)
-	rg.POST("/artists/:id/concerts", h.create)
+
+	admin := rg.Group("/")
+	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+	{
+		admin.POST("/artists/:id/concerts", h.create)
+		admin.DELETE("/concerts/:id", h.delete)
+	}
 }
 
 func (h *Handler) list(c *gin.Context) {
@@ -106,4 +113,17 @@ func (h *Handler) create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, created)
+}
+
+func (h *Handler) delete(c *gin.Context) {
+	if err := h.repo.DeleteByID(c.Request.Context(), c.Param("id")); err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "concert not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

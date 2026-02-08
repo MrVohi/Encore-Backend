@@ -32,6 +32,14 @@ type CreateArtistRequest struct {
 	PreviewURL *string `json:"preview_url"`
 }
 
+// For PUT body (partial updates allowed)
+type UpdateArtistRequest struct {
+	Name       *string `json:"name"`
+	Genre      *string `json:"genre"`
+	ImageURL   *string `json:"image_url"`
+	PreviewURL *string `json:"preview_url"`
+}
+
 func (a *Artist) ResolveURLs(baseURL string) {
 	base := strings.TrimRight(baseURL, "/")
 

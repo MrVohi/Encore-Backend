@@ -2,6 +2,8 @@ package artist
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -119,6 +121,58 @@ func (r *Repository) Create(ctx context.Context, req CreateArtistRequest) (Artis
 		)
 
 	return a, err
+}
+
+func (r *Repository) Update(ctx context.Context, id string, req UpdateArtistRequest) (Artist, error) {
+	set := make([]string, 0, 4)
+	args := make([]any, 0, 5)
+
+	if req.Name != nil {
+		args = append(args, *req.Name)
+		set = append(set, "name = $"+strconv.Itoa(len(args)))
+	}
+	if req.Genre != nil {
+		args = append(args, *req.Genre)
+		set = append(set, "genre = $"+strconv.Itoa(len(args)))
+	}
+	if req.ImageURL != nil {
+		args = append(args, *req.ImageURL)
+		set = append(set, "image_url = $"+strconv.Itoa(len(args)))
+	}
+	if req.PreviewURL != nil {
+		args = append(args, *req.PreviewURL)
+		set = append(set, "preview_url = $"+strconv.Itoa(len(args)))
+	}
+
+	if len(set) == 0 {
+		return Artist{}, pgx.ErrNoRows
+	}
+
+	args = append(args, id)
+	sql := fmt.Sprintf(`
+		UPDATE artists
+		SET %s
+		WHERE id = $%d
+		RETURNING id, name, genre, image_url, preview_url,
+			artwork_asset_id, preview_asset_id, created_at
+	`, strings.Join(set, ", "), len(args))
+
+	var a Artist
+	err := r.pool.QueryRow(ctx, sql, args...).Scan(
+		&a.ID,
+		&a.Name,
+		&a.Genre,
+		&a.LegacyImageURL,
+		&a.LegacyPreviewURL,
+		&a.ArtworkAssetID,
+		&a.PreviewAssetID,
+		&a.CreatedAt,
+	)
+	if err != nil {
+		return Artist{}, err
+	}
+
+	return r.GetByID(ctx, id, nil)
 }
 
 func (r *Repository) UpdateArtworkAsset(ctx context.Context, artistID string, assetID string) error {

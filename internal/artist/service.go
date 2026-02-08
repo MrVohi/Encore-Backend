@@ -17,7 +17,7 @@ func NewService(repo *Repository, mediaService *media.Service) *Service {
 }
 
 func (s *Service) UploadArtwork(ctx context.Context, artistID string, fileHeader *multipart.FileHeader) (Artist, error) {
-	if _, err := s.repo.GetByID(ctx, artistID); err != nil {
+	if _, err := s.repo.GetByID(ctx, artistID, nil); err != nil {
 		return Artist{}, err
 	}
 
@@ -30,11 +30,11 @@ func (s *Service) UploadArtwork(ctx context.Context, artistID string, fileHeader
 		return Artist{}, err
 	}
 
-	return s.repo.GetByID(ctx, artistID)
+	return s.repo.GetByID(ctx, artistID, nil)
 }
 
 func (s *Service) UploadPreview(ctx context.Context, artistID string, fileHeader *multipart.FileHeader) (Artist, error) {
-	if _, err := s.repo.GetByID(ctx, artistID); err != nil {
+	if _, err := s.repo.GetByID(ctx, artistID, nil); err != nil {
 		return Artist{}, err
 	}
 
@@ -47,11 +47,11 @@ func (s *Service) UploadPreview(ctx context.Context, artistID string, fileHeader
 		return Artist{}, err
 	}
 
-	return s.repo.GetByID(ctx, artistID)
+	return s.repo.GetByID(ctx, artistID, nil)
 }
 
 func (s *Service) DeleteArtist(ctx context.Context, artistID string) error {
-	a, err := s.repo.GetByID(ctx, artistID)
+	a, err := s.repo.GetByID(ctx, artistID, nil)
 	if err != nil {
 		return err
 	}

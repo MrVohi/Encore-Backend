@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"groupie-tracker/internal/middleware"
 )
 
 type Handler struct {
@@ -17,7 +19,12 @@ func NewHandler(repo *Repository, service *Service) *Handler {
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/geo", h.get)
-	rg.POST("/geo/resolve", h.resolve)
+
+	admin := rg.Group("/")
+	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+	{
+		admin.POST("/geo/resolve", h.resolve)
+	}
 }
 
 func (h *Handler) get(c *gin.Context) {
@@ -61,9 +68,9 @@ func (h *Handler) resolve(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"city": normalize(req.City),
+		"city":    normalize(req.City),
 		"country": normalize(req.Country),
-		"lat": lat,
-		"lng": lng,
+		"lat":     lat,
+		"lng":     lng,
 	})
 }

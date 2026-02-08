@@ -11,6 +11,15 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	authHandler := NewAuthHandler()
 	BackfillGoogleUsers()
 
+	adminUsers := api.Group("/users")
+	adminUsers.Use(middleware.AuthMiddleware())
+	adminUsers.Use(middleware.AdminOnly())
+	{
+		adminUsers.GET("", authHandler.ListUsers)
+		adminUsers.POST("/:id/promote", authHandler.PromoteUser)
+		adminUsers.DELETE("/:id", authHandler.DeleteUser)
+	}
+
 	authGroup := api.Group("/auth")
 	{
 		authGroup.POST("/register", authHandler.Register)
@@ -43,6 +52,7 @@ func RegisterRoutes(api *gin.RouterGroup) {
 	protectedRoot.Use(middleware.AuthMiddleware())
 	{
 		protectedRoot.GET("/me", authHandler.GetCurrentUser)
+		protectedRoot.GET("/user", authHandler.GetCurrentUser)
 		protectedRoot.POST("/logout", func(c *gin.Context) {
 			c.JSON(200, gin.H{"message": "logged out"})
 		})

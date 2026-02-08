@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+
+	"groupie-tracker/internal/middleware"
 )
 
 type Handler struct {
@@ -19,7 +21,12 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/albums", h.list)
 	rg.GET("/albums/:id", h.getByID)
 	rg.GET("/artists/:id/albums", h.listArtistAlbums)
-	rg.POST("/artists/:id/albums", h.create)
+
+	admin := rg.Group("/")
+	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+	{
+		admin.POST("/artists/:id/albums", h.create)
+	}
 }
 
 func (h *Handler) list(c *gin.Context) {

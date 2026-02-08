@@ -457,6 +457,9 @@ func (h *AuthHandler) DeleteAvatar(c *gin.Context) {
 
 type userListItem struct {
 	ID           string  `json:"id"`
+	Username     string  `json:"username"`
+	Email        string  `json:"email"`
+	IsAdmin      bool    `json:"is_admin"`
 	CreatedAt    string  `json:"created_at"`
 	IsVerified   *bool   `json:"is_verified,omitempty"`
 	LastActiveAt *string `json:"last_active_at,omitempty"`
@@ -471,6 +474,9 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 
 	type row struct {
 		ID              string
+		Username        string
+		Email           string
+		Role            string
 		CreatedAt       time.Time
 		IsEmailVerified bool
 		LastActiveAt    *time.Time
@@ -478,7 +484,7 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 
 	var rows []row
 	if err := db.Model(&models.User{}).
-		Select("id, created_at, is_email_verified, last_active_at").
+		Select("id, username, email, role, created_at, is_email_verified, last_active_at").
 		Order("created_at DESC").
 		Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -495,6 +501,9 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 		}
 		out = append(out, userListItem{
 			ID:           r.ID,
+			Username:     r.Username,
+			Email:        r.Email,
+			IsAdmin:      r.Role == "admin",
 			CreatedAt:    r.CreatedAt.Format(time.RFC3339),
 			IsVerified:   &isVerified,
 			LastActiveAt: lastActive,
@@ -502,4 +511,56 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *AuthHandler) PromoteUser(c *gin.Context) {
+	targetID := c.Param("id")
+	if targetID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing user id"})
+		return
+	}
+
+	db := database.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database not initialized"})
+		return
+	}
+
+	res := db.Model(&models.User{}).Where("id = ?", targetID).Update("role", "admin")
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
+		return
+	}
+	if res.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "user promoted"})
+}
+
+func (h *AuthHandler) DeleteUser(c *gin.Context) {
+	targetID := c.Param("id")
+	if targetID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing user id"})
+		return
+	}
+
+	db := database.GetDB()
+	if db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database not initialized"})
+		return
+	}
+
+	res := db.Delete(&models.User{}, "id = ?", targetID)
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
+		return
+	}
+	if res.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

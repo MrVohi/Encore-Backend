@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"groupie-tracker/internal/media"
+	"groupie-tracker/internal/middleware"
 	"groupie-tracker/pkg/utils"
 )
 
@@ -27,10 +28,16 @@ func NewHandler(repo *Repository, service *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/artists", h.list)
 	rg.GET("/artists/:id", h.getByID)
-	rg.POST("/artists", h.create)
-	rg.POST("/artists/:id/artwork", h.uploadArtwork)
-	rg.POST("/artists/:id/preview", h.uploadPreview)
-	rg.DELETE("/artists/:id", h.delete)
+
+	admin := rg.Group("/")
+	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+	{
+		admin.POST("/artists", h.create)
+		admin.PUT("/artists/:id", h.update)
+		admin.POST("/artists/:id/artwork", h.uploadArtwork)
+		admin.POST("/artists/:id/preview", h.uploadPreview)
+		admin.DELETE("/artists/:id", h.delete)
+	}
 }
 
 func (h *Handler) list(c *gin.Context) {
@@ -68,6 +75,16 @@ func (h *Handler) create(c *gin.Context) {
 		return
 	}
 
+	// Ensure non-null values for legacy columns when files are uploaded separately
+	if req.ImageURL == nil {
+		empty := ""
+		req.ImageURL = &empty
+	}
+	if req.PreviewURL == nil {
+		empty := ""
+		req.PreviewURL = &empty
+	}
+
 	a, err := h.repo.Create(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -76,6 +93,32 @@ func (h *Handler) create(c *gin.Context) {
 
 	h.resolveURLs(c, &a)
 	c.JSON(http.StatusCreated, a)
+}
+
+func (h *Handler) update(c *gin.Context) {
+	var req UpdateArtistRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Name == nil && req.Genre == nil && req.ImageURL == nil && req.PreviewURL == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
+		return
+	}
+
+	a, err := h.repo.Update(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "artist not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.resolveURLs(c, &a)
+	c.JSON(http.StatusOK, a)
 }
 
 func (h *Handler) uploadArtwork(c *gin.Context) {

@@ -103,6 +103,20 @@ func (r *Repository) Create(ctx context.Context, req CreateConcertRequest, id st
 	return c, err
 }
 
+func (r *Repository) DeleteByID(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `
+		DELETE FROM concerts
+		WHERE id = $1
+	`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 func (r *Repository) ArtistExists(ctx context.Context, artistID string) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
