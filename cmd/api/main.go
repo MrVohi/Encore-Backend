@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/joho/godotenv"
 
@@ -18,6 +19,7 @@ import (
 	"groupie-tracker/internal/media"
 	"groupie-tracker/internal/notifications"
 	"groupie-tracker/internal/search"
+	"groupie-tracker/internal/storage"
 	"groupie-tracker/internal/track"
 )
 
@@ -47,9 +49,23 @@ func main() {
 
 	artistRepo := artist.NewRepository(pool)
 	mediaRepo := media.NewRepository(pool)
-	mediaService := media.NewService(mediaRepo, "uploads")
+
+	var store storage.Driver
+	switch strings.ToLower(cfg.StorageDriver) {
+	case "r2":
+		store, err = storage.NewR2Storage(ctx, cfg.R2Endpoint, cfg.R2Bucket, cfg.R2AccessKeyID, cfg.R2SecretKey)
+		if err != nil {
+			log.Fatal("Failed to configure R2 storage:", err)
+		}
+	case "local", "":
+		store = storage.NewLocalStorage(cfg.UploadsDir)
+	default:
+		log.Fatalf("Unsupported STORAGE_DRIVER: %s", cfg.StorageDriver)
+	}
+
+	mediaService := media.NewService(mediaRepo, store)
 	artistService := artist.NewService(artistRepo, mediaService)
-	artistHandler := artist.NewHandler(artistRepo, artistService)
+	artistHandler := artist.NewHandler(artistRepo, artistService, cfg.R2PublicBaseURL)
 
 	albumRepo := album.NewRepository(pool)
 	albumHandler := album.NewHandler(albumRepo)
@@ -72,7 +88,7 @@ func main() {
 	concertRepo := concert.NewRepository(pool)
 	concertHandler := concert.NewHandler(concertRepo, notifyService)
 
-	r := httpserver.NewRouter(cfg.FrontendURL, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler, followHandler)
+	r := httpserver.NewRouter(cfg.FrontendURL, cfg.UploadsDir, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler, followHandler)
 	api := r.Group("/api")
 	searchRepo := search.NewRepository(pool)
 	searchHandler := search.NewHandler(searchRepo)

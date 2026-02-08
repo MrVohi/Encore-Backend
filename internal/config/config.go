@@ -6,20 +6,41 @@ import (
 )
 
 type Config struct {
-	Addr        string
-	DatabaseURL string
-	FrontendURL string
+	AppEnv          string
+	Addr            string
+	DatabaseURL     string
+	FrontendURL     string
+	StorageDriver   string
+	UploadsDir      string
+	R2Endpoint      string
+	R2Bucket        string
+	R2AccessKeyID   string
+	R2SecretKey     string
+	R2PublicBaseURL string
 }
 
 func Load() (Config, error) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = os.Getenv("POSTGRES_URL")
+	}
+
 	cfg := Config{
-		Addr:        env("ADDR", "localhost:8080"),
-		DatabaseURL: os.Getenv("POSTGRES_URL"),
-		FrontendURL: env("FRONTEND_URL", "http://localhost:5173"),
+		AppEnv:          env("APP_ENV", "dev"),
+		Addr:            env("ADDR", "localhost:8080"),
+		DatabaseURL:     dbURL,
+		FrontendURL:     env("FRONTEND_URL", "http://localhost:5173"),
+		StorageDriver:   env("STORAGE_DRIVER", "local"),
+		UploadsDir:      env("UPLOADS_DIR", "uploads"),
+		R2Endpoint:      os.Getenv("R2_ENDPOINT"),
+		R2Bucket:        os.Getenv("R2_BUCKET"),
+		R2AccessKeyID:   os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretKey:     os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2PublicBaseURL: os.Getenv("R2_PUBLIC_BASE_URL"),
 	}
 
 	if cfg.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL is required")
+		return Config{}, fmt.Errorf("DATABASE_URL or POSTGRES_URL is required")
 	}
 	return cfg, nil
 }

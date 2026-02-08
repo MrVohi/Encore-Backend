@@ -15,10 +15,12 @@ import (
 	"groupie-tracker/internal/track"
 )
 
-func NewRouter(frontendURL string, artistHandler *artist.Handler, albumHandler *album.Handler, trackHandler *track.Handler, concertHandler *concert.Handler, geoHandler *geo.Handler, followHandler *follow.Handler) *gin.Engine {
+func NewRouter(frontendURL string, uploadsDir string, artistHandler *artist.Handler, albumHandler *album.Handler, trackHandler *track.Handler, concertHandler *concert.Handler, geoHandler *geo.Handler, followHandler *follow.Handler) *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.New(middleware.CORS(frontendURL)))
-	r.Static("/uploads", "./uploads")
+	if uploadsDir != "" {
+		r.Static("/uploads", uploadsDir)
+	}
 
 	api := r.Group("/api")
 	// register artist routes

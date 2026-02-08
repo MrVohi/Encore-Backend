@@ -13,7 +13,13 @@ import (
 var DB *gorm.DB
 
 func Connect() {
-	dsn := os.Getenv("POSTGRES_URL")
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = os.Getenv("POSTGRES_URL")
+	}
+	if dsn == "" {
+		log.Fatal("DATABASE_URL or POSTGRES_URL is required")
+	}
 
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -28,14 +34,15 @@ func Connect() {
 
 	DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
 
-	err = DB.AutoMigrate(&models.User{}, &models.RefreshToken{})
-	if err != nil {
-		log.Fatal("Failed to migrate database:", err)
+	if os.Getenv("APP_ENV") == "dev" {
+		err = DB.AutoMigrate(&models.User{}, &models.RefreshToken{})
+		if err != nil {
+			log.Fatal("Failed to migrate database:", err)
+		}
+		log.Println("Database migrated successfully")
 	}
 
 	DB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username))")
-
-	log.Println("Database migrated successfully")
 }
 
 func GetDB() *gorm.DB {
