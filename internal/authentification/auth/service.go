@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -238,7 +239,11 @@ func (s *AuthService) Register(input RegisterInput) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	go s.emailService.SendVerificationEmail(user.Email, verifyToken)
+	go func(email, token string) {
+		if err := s.emailService.SendVerificationEmail(email, token); err != nil {
+			log.Printf("email: verification send error email=%s err=%v", email, err)
+		}
+	}(user.Email, verifyToken)
 
 	accessToken, err := utils.GenerateToken(user.ID, user.Email)
 	if err != nil {
@@ -349,7 +354,11 @@ func (s *AuthService) ResendVerification(email string) error {
 		return err
 	}
 
-	go s.emailService.SendVerificationEmail(user.Email, verifyToken)
+	go func(email, token string) {
+		if err := s.emailService.SendVerificationEmail(email, token); err != nil {
+			log.Printf("email: verification send error email=%s err=%v", email, err)
+		}
+	}(user.Email, verifyToken)
 
 	return nil
 }
@@ -375,7 +384,11 @@ func (s *AuthService) RequestPasswordReset(email string) error {
 		return err
 	}
 
-	go s.emailService.SendPasswordResetEmail(user.Email, resetToken)
+	go func(email, token string) {
+		if err := s.emailService.SendPasswordResetEmail(email, token); err != nil {
+			log.Printf("email: reset send error email=%s err=%v", email, err)
+		}
+	}(user.Email, resetToken)
 
 	return nil
 }
