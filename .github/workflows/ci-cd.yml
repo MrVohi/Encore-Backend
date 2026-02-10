@@ -3,7 +3,9 @@ name: CI/CD
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - prod/deploy-setup
 
 jobs:
   build:
