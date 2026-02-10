@@ -48,6 +48,8 @@ create table concerts (
   "when" timestamptz not null,
   country text not null,
   city text not null,
+  lat double precision,
+  lng double precision,
   capacity integer not null check (capacity >= 0),
   status text not null,
   external_id text not null
