@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"groupie-tracker/internal/album"
@@ -21,6 +24,8 @@ import (
 	"groupie-tracker/internal/search"
 	"groupie-tracker/internal/storage"
 	"groupie-tracker/internal/track"
+
+	"github.com/getsentry/sentry-go"
 )
 
 func main() {
@@ -32,6 +37,21 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
+	}
+
+	dsn := strings.TrimSpace(os.Getenv("SENTRY_DSN"))
+	if dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              dsn,
+			Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
+			Release:          os.Getenv("SENTRY_RELEASE"),
+			AttachStacktrace: true,
+			TracesSampleRate: 0.0,
+		}); err != nil {
+			log.Printf("Sentry init failed: %v\n", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
 	}
 
 	ctx := context.Background()
@@ -93,6 +113,11 @@ func main() {
 	searchRepo := search.NewRepository(pool)
 	searchHandler := search.NewHandler(searchRepo)
 	searchHandler.RegisterRoutes(api)
+
+	r.GET("/api/sentry-test", func(c *gin.Context) {
+		sentry.CaptureMessage("Backend Sentry Test (safe to ignore)")
+		c.JSON(200, gin.H{"ok": true})
+	})
 
 	log.Printf("Server starting on %s", cfg.Addr)
 	log.Fatal(r.Run(cfg.Addr))

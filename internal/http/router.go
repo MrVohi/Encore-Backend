@@ -1,6 +1,10 @@
 package httpserver
 
 import (
+	"os"
+	"strings"
+
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
@@ -17,6 +21,13 @@ import (
 
 func NewRouter(frontendURL string, uploadsDir string, artistHandler *artist.Handler, albumHandler *album.Handler, trackHandler *track.Handler, concertHandler *concert.Handler, geoHandler *geo.Handler, followHandler *follow.Handler) *gin.Engine {
 	r := gin.Default()
+
+	if strings.TrimSpace(os.Getenv("SENTRY_DSN")) != "" {
+		r.Use(sentrygin.New(sentrygin.Options{
+			Repanic: true,
+		}))
+	}
+
 	r.Use(cors.New(middleware.CORS(frontendURL)))
 	if uploadsDir != "" {
 		r.Static("/uploads", uploadsDir)
