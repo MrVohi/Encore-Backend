@@ -1,0 +1,54 @@
+Question ?
+
+Sur le site si je veux 
+ - Proposer un concert.
+ - Ajouter un ticket pour une place
+ - Configurer un prix
+
+Comment cela se passe-t-il ?
+
+1) Crées d’abord un concert
+Dans ta base, un concert est une ligne dans concerts. Champs clés :
+artist_id
+when
+city, country
+capacity
+status (ex: published)
+external_id (peut être un identifiant interne)
+
+2) Tu crées ensuite un ticket type (prix + quantité)
+Le prix n’est pas dans concerts, il est dans ticket_types.
+
+Champs essentiels :
+
+concert_id (lien vers le concert)
+name (ex: “Standard”, “VIP”)
+price (ex: 49.00)
+currency (ex: EUR)
+quantity (stock)
+starts / ends (période de vente)
+Important : notre endpoint /api/concerts/upcoming retourne le ticket type le moins cher qui est :
+
+quantity > 0
+et now() entre starts et ends
+Si aucun ticket type ne respecte ça, le concert n’apparaîtra pas sur la page Tickets.
+
+Exemple SQL rapide (pour tester)
+
+-- 1) créer un concert
+INSERT INTO concerts (artist_id, "when", country, city, capacity, status, external_id)
+VALUES ('uuid-artist', '2026-03-01 20:00:00+00', 'France', 'Paris', 500, 'published', 'local-001');
+
+-- 2) créer un ticket type
+INSERT INTO ticket_types (concert_id, name, price, currency, quantity, starts, ends)
+VALUES ('uuid-concert', 'Standard', 49.00, 'EUR', 200, now() - interval '1 day', now() + interval '30 day');
+
+
+Ce que Stripe fait ensuite
+Quand un utilisateur achète :
+
+- Le backend récupère le ticket type actif
+- Crée la session Stripe avec price et currency
+- À la confirmation (webhook), il décrémente quantity et crée les tickets
+
+**J'ai rajouté la possilité de le faire via l'interface admin**
