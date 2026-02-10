@@ -8,13 +8,17 @@ import (
 	"github.com/joho/godotenv"
 
 	"groupie-tracker/internal/artist"
+	"groupie-tracker/internal/concerts"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
 	httpserver "groupie-tracker/internal/http"
+	"groupie-tracker/internal/tickets"
 
 	"groupie-tracker/internal/authentification/auth"
 	"groupie-tracker/internal/authentification/database"
 	"groupie-tracker/internal/middleware"
+
+	"github.com/stripe/stripe-go/v84"
 )
 
 func main() {
@@ -26,6 +30,10 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("Erreur chargement config:", err)
+	}
+
+	if cfg.StripeKey != "" {
+		stripe.Key = cfg.StripeKey
 	}
 
 	ctx := context.Background()
@@ -45,6 +53,10 @@ func main() {
 
 	artistRepo := artist.NewRepository(pool)
 	artistHandler := artist.NewHandler(artistRepo)
+	concertRepo := concerts.NewRepository(pool)
+	concertHandler := concerts.NewHandler(concertRepo)
+	ticketsRepo := tickets.NewRepository(pool)
+	ticketsHandler := tickets.NewHandler(ticketsRepo, cfg.FrontendURL, cfg.WebhookSecret)
 
 	authHandler := auth.NewAuthHandler()
 
@@ -52,6 +64,10 @@ func main() {
 
 	api := r.Group("/api")
 	{
+		ticketsHandler.RegisterPublicRoutes(api)
+		ticketsHandler.RegisterWebhookRoutes(api)
+		concertHandler.RegisterPublicRoutes(api)
+
 		authGroup := api.Group("/auth")
 		{
 
@@ -69,6 +85,14 @@ func main() {
 		protected.Use(middleware.AuthMiddleware())
 		{
 			protected.GET("/me", authHandler.GetCurrentUser)
+			ticketsHandler.RegisterProtectedRoutes(protected)
+		}
+
+		admin := api.Group("/")
+		admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware())
+		{
+			concertHandler.RegisterAdminRoutes(admin)
+			ticketsHandler.RegisterAdminRoutes(admin)
 		}
 	}
 
