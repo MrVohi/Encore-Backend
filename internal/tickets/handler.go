@@ -51,6 +51,7 @@ func (h *Handler) RegisterWebhookRoutes(rg *gin.RouterGroup) {
 
 func (h *Handler) RegisterAdminRoutes(rg *gin.RouterGroup) {
 	rg.POST("/concerts/:id/ticket-types", h.createTicketType)
+	rg.PATCH("/ticket-types/:id", h.updateTicketType)
 	rg.DELETE("/ticket-types/:id", h.deleteTicketType)
 	rg.GET("/tickets/admin", h.listAdminTickets)
 	rg.POST("/tickets/admin", h.createAdminTicket)
@@ -190,6 +191,7 @@ func (h *Handler) createCheckoutSession(c *gin.Context) {
 		Metadata: map[string]string{
 			"concert_id":     info.ConcertID,
 			"ticket_type_id": info.TicketTypeID,
+			"ticket_type":    info.TicketType,
 			"user_id":        userIDStr,
 			"quantity":       strconv.Itoa(req.Quantity),
 		},
@@ -278,6 +280,7 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 					UserID:          userID,
 					ConcertID:       item.ConcertID,
 					TicketTypeID:    item.TicketTypeID,
+					TicketType:      item.TicketType,
 					SessionID:       session.ID,
 					Quantity:        item.Quantity,
 					PaymentIntentID: paymentIntentID,
@@ -296,6 +299,7 @@ func (h *Handler) handleWebhook(c *gin.Context) {
 		UserID:       meta["user_id"],
 		ConcertID:    meta["concert_id"],
 		TicketTypeID: meta["ticket_type_id"],
+		TicketType:   meta["ticket_type"],
 		SessionID:    session.ID,
 		Quantity:     0,
 	}
@@ -348,7 +352,11 @@ func (h *Handler) sendTicketEmail(ctx context.Context, req FulfillRequest, sessi
 		return err
 	}
 
-	qrPayload := fmt.Sprintf("encore:ticket:%s:%s:%s", req.SessionID, req.UserID, req.TicketTypeID)
+	ticketType := req.TicketType
+	if ticketType == "" {
+		ticketType = req.TicketTypeID
+	}
+	qrPayload := fmt.Sprintf("encore:ticket:%s:%s:%s", req.SessionID, req.UserID, ticketType)
 	subject, textBody, htmlBody, err := buildTicketEmail(TicketEmailInfo{
 		ConcertTitle: info.ConcertTitle,
 		When:         info.When,
@@ -454,6 +462,44 @@ func (h *Handler) deleteTicketType(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *Handler) updateTicketType(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ticket type id is required"})
+		return
+	}
+
+	var req UpdateTicketTypeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+
+	if req.Currency != nil {
+		val := strings.ToUpper(strings.TrimSpace(*req.Currency))
+		if val == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "currency is required"})
+			return
+		}
+		req.Currency = &val
+	}
+
+	updated, err := h.repo.UpdateTicketType(c.Request.Context(), id, req)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ticket type not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update ticket type"})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
 func (h *Handler) listAdminTickets(c *gin.Context) {
 	tickets, err := h.repo.ListAdminTickets(c.Request.Context())
 	if err != nil {
@@ -470,12 +516,9 @@ func (h *Handler) createAdminTicket(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
-	if req.UserID == "" || req.ConcertID == "" || req.TicketTypeID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id, concert_id, ticket_type_id are required"})
+	if req.UserID == "" || req.ConcertID == "" || strings.TrimSpace(req.TicketType) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id, concert_id, ticket_type are required"})
 		return
-	}
-	if strings.TrimSpace(req.Seat) == "" {
-		req.Seat = "GA"
 	}
 	if strings.TrimSpace(req.Status) == "" {
 		req.Status = "issued"
@@ -533,6 +576,7 @@ func (h *Handler) deleteAdminTicket(c *gin.Context) {
 func (h *Handler) ticketStats(c *gin.Context) {
 	stats, err := h.repo.GetTicketStats(c.Request.Context())
 	if err != nil {
+		log.Printf("ticket stats failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load ticket stats"})
 		return
 	}

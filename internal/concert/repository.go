@@ -2,6 +2,9 @@ package concert
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -115,6 +118,63 @@ func (r *Repository) DeleteByID(ctx context.Context, id string) error {
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+func (r *Repository) Update(ctx context.Context, id string, req UpdateConcertRequest) (Concert, error) {
+	set := make([]string, 0, 7)
+	args := make([]any, 0, 8)
+
+	if req.When != nil {
+		when, err := time.Parse("2006-01-02 15:04:05", *req.When)
+		if err != nil {
+			return Concert{}, err
+		}
+		args = append(args, when)
+		set = append(set, "\"when\" = $"+strconv.Itoa(len(args)))
+	}
+	if req.City != nil {
+		args = append(args, *req.City)
+		set = append(set, "city = $"+strconv.Itoa(len(args)))
+	}
+	if req.Country != nil {
+		args = append(args, *req.Country)
+		set = append(set, "country = $"+strconv.Itoa(len(args)))
+	}
+	if req.Capacity != nil {
+		args = append(args, *req.Capacity)
+		set = append(set, "capacity = $"+strconv.Itoa(len(args)))
+	}
+	if req.Status != nil {
+		args = append(args, *req.Status)
+		set = append(set, "status = $"+strconv.Itoa(len(args)))
+	}
+	if req.Lat != nil {
+		args = append(args, *req.Lat)
+		set = append(set, "lat = $"+strconv.Itoa(len(args)))
+	}
+	if req.Lng != nil {
+		args = append(args, *req.Lng)
+		set = append(set, "lng = $"+strconv.Itoa(len(args)))
+	}
+
+	if len(set) == 0 {
+		return Concert{}, fmt.Errorf("no fields to update")
+	}
+
+	args = append(args, id)
+	var c Concert
+	var when time.Time
+	err := r.pool.QueryRow(ctx, `
+		UPDATE concerts
+		SET `+strings.Join(set, ", ")+`
+		WHERE id = $`+strconv.Itoa(len(args))+`
+		RETURNING id, artist_id, "when", city, country, capacity, status, created_at, lat, lng
+	`, args...).Scan(&c.ID, &c.ArtistID, &when, &c.City, &c.Country, &c.Capacity, &c.Status, &c.CreatedAt, &c.Lat, &c.Lng)
+	if err != nil {
+		return Concert{}, err
+	}
+	c.When = when.Format("2006-01-02 15:04:05")
+	return c, nil
 }
 
 func (r *Repository) ArtistExists(ctx context.Context, artistID string) (bool, error) {

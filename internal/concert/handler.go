@@ -33,6 +33,7 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
 	{
 		admin.POST("/artists/:id/concerts", h.create)
+		admin.PUT("/concerts/:id", h.update)
 		admin.DELETE("/concerts/:id", h.delete)
 	}
 }
@@ -113,6 +114,29 @@ func (h *Handler) create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, created)
+}
+
+func (h *Handler) update(c *gin.Context) {
+	var req UpdateConcertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.When == nil && req.City == nil && req.Country == nil && req.Capacity == nil && req.Status == nil && req.Lat == nil && req.Lng == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
+		return
+	}
+
+	updated, err := h.repo.Update(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "concert not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
 }
 
 func (h *Handler) delete(c *gin.Context) {

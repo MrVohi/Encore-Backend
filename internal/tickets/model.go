@@ -32,6 +32,7 @@ type CheckoutResponse struct {
 type CheckoutInfo struct {
 	ConcertID    string
 	TicketTypeID string
+	TicketType   string
 	Title        string
 	City         string
 	Country      string
@@ -45,6 +46,7 @@ type FulfillRequest struct {
 	UserID          string
 	ConcertID       string
 	TicketTypeID    string
+	TicketType      string
 	SessionID       string
 	PaymentIntentID string
 	Quantity        int
@@ -57,6 +59,15 @@ type CreateTicketTypeRequest struct {
 	Quantity   int    `json:"quantity"`
 	Starts     string `json:"starts"`
 	Ends       string `json:"ends"`
+}
+
+type UpdateTicketTypeRequest struct {
+	Name       *string `json:"name"`
+	PriceCents *int64  `json:"price_cents"`
+	Currency   *string `json:"currency"`
+	Quantity   *int    `json:"quantity"`
+	Starts     *string `json:"starts"`
+	Ends       *string `json:"ends"`
 }
 
 type TicketType struct {
@@ -77,7 +88,7 @@ type TicketSummary struct {
 	When      time.Time  `json:"when"`
 	City      string     `json:"city"`
 	Country   string     `json:"country"`
-	Seat      string     `json:"seat"`
+	TicketType string    `json:"ticket_type"`
 	Status    string     `json:"status"`
 	IssuedAt  time.Time  `json:"issued_at"`
 	UsedAt    *time.Time `json:"used_at,omitempty"`
@@ -89,36 +100,34 @@ type UserTicketsResponse struct {
 }
 
 type AdminTicket struct {
-	ID           string     `json:"id"`
-	UserID       string     `json:"user_id"`
-	UserEmail    string     `json:"user_email"`
-	ConcertID    string     `json:"concert_id"`
-	Artist       string     `json:"artist"`
-	When         time.Time  `json:"when"`
-	City         string     `json:"city"`
-	Country      string     `json:"country"`
-	Seat         string     `json:"seat"`
-	Status       string     `json:"status"`
-	IssuedAt     time.Time  `json:"issued_at"`
-	UsedAt       *time.Time `json:"used_at,omitempty"`
-	TicketTypeID string     `json:"ticket_type_id"`
-	OrderID      *string    `json:"order_id,omitempty"`
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	UserEmail  string     `json:"user_email"`
+	ConcertID  string     `json:"concert_id"`
+	Artist     string     `json:"artist"`
+	When       time.Time  `json:"when"`
+	City       string     `json:"city"`
+	Country    string     `json:"country"`
+	TicketType string     `json:"ticket_type"`
+	Status     string     `json:"status"`
+	IssuedAt   time.Time  `json:"issued_at"`
+	UsedAt     *time.Time `json:"used_at,omitempty"`
+	OrderID    *string    `json:"order_id,omitempty"`
 }
 
 type CreateTicketRequest struct {
-	UserID       string     `json:"user_id"`
-	ConcertID    string     `json:"concert_id"`
-	TicketTypeID string     `json:"ticket_type_id"`
-	Seat         string     `json:"seat"`
-	Status       string     `json:"status"`
-	IssuedAt     *time.Time `json:"issued_at,omitempty"`
-	UsedAt       *time.Time `json:"used_at,omitempty"`
+	UserID     string     `json:"user_id"`
+	ConcertID  string     `json:"concert_id"`
+	TicketType string     `json:"ticket_type"`
+	Status     string     `json:"status"`
+	IssuedAt   *time.Time `json:"issued_at,omitempty"`
+	UsedAt     *time.Time `json:"used_at,omitempty"`
 }
 
 type UpdateTicketRequest struct {
-	Seat   *string    `json:"seat"`
-	Status *string    `json:"status"`
-	UsedAt *time.Time `json:"used_at"`
+	TicketType *string    `json:"ticket_type"`
+	Status     *string    `json:"status"`
+	UsedAt     *time.Time `json:"used_at"`
 }
 
 type TicketStats struct {

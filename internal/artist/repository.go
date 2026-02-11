@@ -22,7 +22,17 @@ func normalizeQuery(q string) string {
 	return strings.Join(strings.Fields(q), " ")
 }
 
-func (r *Repository) List(ctx context.Context, userID *string) ([]Artist, error) {
+func (r *Repository) List(ctx context.Context, userID *string, genre *string) ([]Artist, error) {
+	var genreFilter *string
+	if genre != nil {
+		value := strings.TrimSpace(*genre)
+		if value != "" {
+			normalized := normalizeQuery(value)
+			like := "%" + normalized + "%"
+			genreFilter = &like
+		}
+	}
+
 	rows, err := r.pool.Query(ctx, `
 		SELECT a.id, a.name, a.genre, a.image_url, a.preview_url,
 			a.artwork_asset_id, a.preview_asset_id, a.created_at,
@@ -37,8 +47,9 @@ func (r *Repository) List(ctx context.Context, userID *string) ([]Artist, error)
 		FROM artists a
 		LEFT JOIN media_assets art ON art.id = a.artwork_asset_id
 		LEFT JOIN media_assets prev ON prev.id = a.preview_asset_id
+		WHERE ($2::text IS NULL OR a.genre ILIKE $2)
 		ORDER BY a.created_at DESC
-	`, userID)
+	`, userID, genreFilter)
 	if err != nil {
 		return nil, err
 	}

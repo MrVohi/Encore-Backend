@@ -91,6 +91,7 @@ func (r *Repository) GetCheckoutInfo(ctx context.Context, concertID string) (Che
 			c.country,
 			a.name AS title,
 			tt.id AS ticket_type_id,
+			tt.name AS ticket_type,
 			round(tt.price * 100)::bigint AS price_cents,
 			tt.currency,
 			tt.quantity
@@ -113,6 +114,7 @@ func (r *Repository) GetCheckoutInfo(ctx context.Context, concertID string) (Che
 		&info.Country,
 		&info.Title,
 		&info.TicketTypeID,
+		&info.TicketType,
 		&info.PriceCents,
 		&info.Currency,
 		&info.Available,
@@ -150,15 +152,16 @@ func (r *Repository) FulfillCheckout(ctx context.Context, req FulfillRequest) (b
 	}
 
 	var concertID string
+	var ticketType string
 	var priceCents int64
 	var currency string
 	var available int
 	if err := tx.QueryRow(ctx, `
-		SELECT concert_id, round(price * 100)::bigint, currency, quantity
+		SELECT concert_id, name, round(price * 100)::bigint, currency, quantity
 		FROM ticket_types
 		WHERE id = $1
 		FOR UPDATE
-	`, req.TicketTypeID).Scan(&concertID, &priceCents, &currency, &available); err != nil {
+	`, req.TicketTypeID).Scan(&concertID, &ticketType, &priceCents, &currency, &available); err != nil {
 		return false, err
 	}
 
@@ -209,10 +212,10 @@ func (r *Repository) FulfillCheckout(ctx context.Context, req FulfillRequest) (b
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO tickets (user_id, concert_id, ticket_type_id, order_id, seat, status, issued_at)
-		SELECT $1, $2, $3, $4, $5 || '-' || gs::text, 'issued', now()
+		INSERT INTO tickets (user_id, concert_id, ticket_type, order_id, status, issued_at)
+		SELECT $1, $2, $3, $4, 'issued', now()
 		FROM generate_series(1, $6) AS gs
-	`, req.UserID, concertID, req.TicketTypeID, orderID, "GA", req.Quantity); err != nil {
+	`, req.UserID, concertID, ticketType, orderID, req.Quantity); err != nil {
 		return false, err
 	}
 
@@ -222,6 +225,7 @@ func (r *Repository) FulfillCheckout(ctx context.Context, req FulfillRequest) (b
 type CartFulfillItem struct {
 	ConcertID    string
 	TicketTypeID string
+	TicketType   string
 	Quantity     int
 }
 
@@ -269,6 +273,7 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 		SELECT
 			ci.id,
 			ci.ticket_type_id,
+			tt.name AS ticket_type,
 			ci.quantity,
 			tt.concert_id,
 			round(tt.price * 100)::bigint AS price_cents,
@@ -287,6 +292,7 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 	type cartRow struct {
 		ItemID       string
 		TicketTypeID string
+		TicketType   string
 		Quantity     int
 		ConcertID    string
 		PriceCents   int64
@@ -297,7 +303,7 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 	var rowsData []cartRow
 	for rows.Next() {
 		var row cartRow
-		if err := rows.Scan(&row.ItemID, &row.TicketTypeID, &row.Quantity, &row.ConcertID, &row.PriceCents, &row.Currency, &row.Available); err != nil {
+		if err := rows.Scan(&row.ItemID, &row.TicketTypeID, &row.TicketType, &row.Quantity, &row.ConcertID, &row.PriceCents, &row.Currency, &row.Available); err != nil {
 			return false, nil, err
 		}
 		rowsData = append(rowsData, row)
@@ -327,6 +333,7 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 		items = append(items, CartFulfillItem{
 			ConcertID:    row.ConcertID,
 			TicketTypeID: row.TicketTypeID,
+			TicketType:   row.TicketType,
 			Quantity:     row.Quantity,
 		})
 	}
@@ -372,10 +379,10 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 
 	for _, row := range rowsData {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO tickets (user_id, concert_id, ticket_type_id, order_id, seat, status, issued_at)
-			SELECT $1, $2, $3, $4, $5 || '-' || gs::text, 'issued', now()
+			INSERT INTO tickets (user_id, concert_id, ticket_type, order_id, status, issued_at)
+			SELECT $1, $2, $3, $4, 'issued', now()
 			FROM generate_series(1, $6) AS gs
-		`, userID, row.ConcertID, row.TicketTypeID, orderID, "GA", row.Quantity); err != nil {
+		`, userID, row.ConcertID, row.TicketType, orderID, row.Quantity); err != nil {
 			return false, nil, err
 		}
 	}
@@ -430,6 +437,58 @@ func (r *Repository) CreateTicketType(ctx context.Context, concertID string, req
 	return tt, err
 }
 
+func (r *Repository) UpdateTicketType(ctx context.Context, id string, req UpdateTicketTypeRequest) (TicketType, error) {
+	set := make([]string, 0, 6)
+	args := make([]any, 0, 7)
+
+	if req.Name != nil {
+		args = append(args, strings.TrimSpace(*req.Name))
+		set = append(set, "name = $"+fmt.Sprint(len(args)))
+	}
+	if req.PriceCents != nil {
+		args = append(args, *req.PriceCents)
+		set = append(set, "price = $"+fmt.Sprint(len(args))+"::numeric / 100")
+	}
+	if req.Currency != nil {
+		args = append(args, strings.TrimSpace(*req.Currency))
+		set = append(set, "currency = $"+fmt.Sprint(len(args)))
+	}
+	if req.Quantity != nil {
+		args = append(args, *req.Quantity)
+		set = append(set, "quantity = $"+fmt.Sprint(len(args)))
+	}
+	if req.Starts != nil {
+		args = append(args, *req.Starts)
+		set = append(set, "starts = $"+fmt.Sprint(len(args)))
+	}
+	if req.Ends != nil {
+		args = append(args, *req.Ends)
+		set = append(set, "ends = $"+fmt.Sprint(len(args)))
+	}
+
+	if len(set) == 0 {
+		return TicketType{}, fmt.Errorf("no fields to update")
+	}
+
+	args = append(args, id)
+	var tt TicketType
+	err := r.pool.QueryRow(ctx, `
+		UPDATE ticket_types
+		SET `+strings.Join(set, ", ")+`
+		WHERE id = $`+fmt.Sprint(len(args))+`
+		RETURNING
+			id,
+			concert_id,
+			name,
+			round(price * 100)::bigint AS price_cents,
+			currency,
+			quantity,
+			starts,
+			ends
+	`, args...).Scan(&tt.ID, &tt.ConcertID, &tt.Name, &tt.PriceCents, &tt.Currency, &tt.Quantity, &tt.Starts, &tt.Ends)
+	return tt, err
+}
+
 func (r *Repository) ListTicketTypes(ctx context.Context, concertID string) ([]TicketType, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, concert_id, name, round(price * 100)::bigint AS price_cents, currency, quantity, starts, ends
@@ -473,7 +532,7 @@ func (r *Repository) GetConcertEmailInfo(ctx context.Context, concertID string) 
 
 func (r *Repository) ListUserTickets(ctx context.Context, userID string) (UserTicketsResponse, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT t.id, t.concert_id, a.name, c."when", c.city, c.country, t.seat, t.status, t.issued_at, t.used_at
+		SELECT t.id, t.concert_id, a.name, c."when", c.city, c.country, t.ticket_type, t.status, t.issued_at, t.used_at
 		FROM tickets t
 		JOIN concerts c ON c.id = t.concert_id
 		JOIN artists a ON a.id = c.artist_id
@@ -489,7 +548,7 @@ func (r *Repository) ListUserTickets(ctx context.Context, userID string) (UserTi
 	var past []TicketSummary
 	for rows.Next() {
 		var t TicketSummary
-		if err := rows.Scan(&t.ID, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.Seat, &t.Status, &t.IssuedAt, &t.UsedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.TicketType, &t.Status, &t.IssuedAt, &t.UsedAt); err != nil {
 			return UserTicketsResponse{}, err
 		}
 		if t.When.After(time.Now()) {
@@ -504,7 +563,7 @@ func (r *Repository) ListUserTickets(ctx context.Context, userID string) (UserTi
 
 func (r *Repository) ListAdminTickets(ctx context.Context) ([]AdminTicket, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT t.id, t.user_id, u.email, t.concert_id, a.name, c."when", c.city, c.country, t.seat, t.status, t.issued_at, t.used_at, t.ticket_type_id, t.order_id
+		SELECT t.id, t.user_id, u.email, t.concert_id, a.name, c."when", c.city, c.country, t.ticket_type, t.status, t.issued_at, t.used_at, t.order_id
 		FROM tickets t
 		JOIN users u ON u.id = t.user_id
 		JOIN concerts c ON c.id = t.concert_id
@@ -519,7 +578,7 @@ func (r *Repository) ListAdminTickets(ctx context.Context) ([]AdminTicket, error
 	var out []AdminTicket
 	for rows.Next() {
 		var t AdminTicket
-		if err := rows.Scan(&t.ID, &t.UserID, &t.UserEmail, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.Seat, &t.Status, &t.IssuedAt, &t.UsedAt, &t.TicketTypeID, &t.OrderID); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.UserEmail, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.TicketType, &t.Status, &t.IssuedAt, &t.UsedAt, &t.OrderID); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -540,10 +599,10 @@ func (r *Repository) CreateAdminTicket(ctx context.Context, req CreateTicketRequ
 
 	var ticketID string
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO tickets (user_id, concert_id, ticket_type_id, order_id, seat, status, issued_at, used_at)
-		VALUES ($1, $2, $3, NULL, $4, $5, $6, $7)
+		INSERT INTO tickets (user_id, concert_id, ticket_type, order_id, status, issued_at, used_at)
+		VALUES ($1, $2, $3, NULL, $4, $5, $6)
 		RETURNING id
-	`, req.UserID, req.ConcertID, req.TicketTypeID, req.Seat, status, issuedAt, req.UsedAt).Scan(&ticketID)
+	`, req.UserID, req.ConcertID, req.TicketType, status, issuedAt, req.UsedAt).Scan(&ticketID)
 	if err != nil {
 		return AdminTicket{}, err
 	}
@@ -554,13 +613,13 @@ func (r *Repository) CreateAdminTicket(ctx context.Context, req CreateTicketRequ
 func (r *Repository) GetAdminTicket(ctx context.Context, ticketID string) (AdminTicket, error) {
 	var t AdminTicket
 	err := r.pool.QueryRow(ctx, `
-		SELECT t.id, t.user_id, u.email, t.concert_id, a.name, c."when", c.city, c.country, t.seat, t.status, t.issued_at, t.used_at, t.ticket_type_id, t.order_id
+		SELECT t.id, t.user_id, u.email, t.concert_id, a.name, c."when", c.city, c.country, t.ticket_type, t.status, t.issued_at, t.used_at, t.order_id
 		FROM tickets t
 		JOIN users u ON u.id = t.user_id
 		JOIN concerts c ON c.id = t.concert_id
 		JOIN artists a ON a.id = c.artist_id
 		WHERE t.id = $1
-	`, ticketID).Scan(&t.ID, &t.UserID, &t.UserEmail, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.Seat, &t.Status, &t.IssuedAt, &t.UsedAt, &t.TicketTypeID, &t.OrderID)
+	`, ticketID).Scan(&t.ID, &t.UserID, &t.UserEmail, &t.ConcertID, &t.Artist, &t.When, &t.City, &t.Country, &t.TicketType, &t.Status, &t.IssuedAt, &t.UsedAt, &t.OrderID)
 
 	return t, err
 }
@@ -569,9 +628,9 @@ func (r *Repository) UpdateAdminTicket(ctx context.Context, ticketID string, req
 	set := make([]string, 0, 3)
 	args := make([]any, 0, 4)
 
-	if req.Seat != nil {
-		args = append(args, *req.Seat)
-		set = append(set, "seat = $"+fmt.Sprint(len(args)))
+	if req.TicketType != nil {
+		args = append(args, *req.TicketType)
+		set = append(set, "ticket_type = $"+fmt.Sprint(len(args)))
 	}
 	if req.Status != nil {
 		args = append(args, *req.Status)
@@ -613,8 +672,8 @@ func (r *Repository) GetTicketStats(ctx context.Context) (TicketStats, error) {
 	err := r.pool.QueryRow(ctx, `
 		SELECT
 			COUNT(*)::int AS total,
-			SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END)::int AS active,
-			SUM(CASE WHEN status = 'used' THEN 1 ELSE 0 END)::int AS used
+			COALESCE(SUM(CASE WHEN status = 'issued' THEN 1 ELSE 0 END), 0)::int AS active,
+			COALESCE(SUM(CASE WHEN status = 'used' THEN 1 ELSE 0 END), 0)::int AS used
 		FROM tickets
 	`).Scan(&stats.Total, &stats.Active, &stats.Used)
 	return stats, err

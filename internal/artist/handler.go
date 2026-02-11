@@ -44,7 +44,12 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 
 func (h *Handler) list(c *gin.Context) {
 	userID := optionalUserID(c)
-	artists, err := h.repo.List(c.Request.Context(), userID)
+	genre := strings.TrimSpace(c.Query("genre"))
+	var genrePtr *string
+	if genre != "" {
+		genrePtr = &genre
+	}
+	artists, err := h.repo.List(c.Request.Context(), userID, genrePtr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -134,9 +134,8 @@ create table tickets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   concert_id uuid not null references concerts(id) on delete cascade,
-  ticket_type_id uuid not null references ticket_types(id) on delete cascade,
+  ticket_type text not null,
   order_id uuid references orders(id) on delete cascade,
-  seat text not null,
   status text not null,
   issued_at timestamptz not null,
   used_at timestamptz -- nullable
