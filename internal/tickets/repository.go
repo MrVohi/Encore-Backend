@@ -214,7 +214,7 @@ func (r *Repository) FulfillCheckout(ctx context.Context, req FulfillRequest) (b
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO tickets (user_id, concert_id, ticket_type, order_id, status, issued_at)
 		SELECT $1, $2, $3, $4, 'issued', now()
-		FROM generate_series(1, $6) AS gs
+		FROM generate_series(1, $5) AS gs
 	`, req.UserID, concertID, ticketType, orderID, req.Quantity); err != nil {
 		return false, err
 	}
@@ -381,7 +381,7 @@ func (r *Repository) FulfillCartCheckout(ctx context.Context, userID, sessionID,
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO tickets (user_id, concert_id, ticket_type, order_id, status, issued_at)
 			SELECT $1, $2, $3, $4, 'issued', now()
-			FROM generate_series(1, $6) AS gs
+			FROM generate_series(1, $5) AS gs
 		`, userID, row.ConcertID, row.TicketType, orderID, row.Quantity); err != nil {
 			return false, nil, err
 		}
