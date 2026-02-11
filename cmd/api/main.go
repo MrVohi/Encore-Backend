@@ -8,11 +8,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/stripe/stripe-go/v84"
 
 	"groupie-tracker/internal/album"
 	"groupie-tracker/internal/artist"
+	"groupie-tracker/internal/cart"
 	"groupie-tracker/internal/concert"
 	"groupie-tracker/internal/config"
 	"groupie-tracker/internal/db"
@@ -20,16 +23,15 @@ import (
 	"groupie-tracker/internal/geo"
 	httpserver "groupie-tracker/internal/http"
 	"groupie-tracker/internal/media"
+	"groupie-tracker/internal/middleware"
 	"groupie-tracker/internal/notifications"
 	"groupie-tracker/internal/search"
 	"groupie-tracker/internal/storage"
+	"groupie-tracker/internal/tickets"
 	"groupie-tracker/internal/track"
-
-	"github.com/getsentry/sentry-go"
 )
 
 func main() {
-
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("Note: No .env file found or error loading it")
 	}
@@ -54,6 +56,10 @@ func main() {
 		}
 	}
 
+	if cfg.StripeKey != "" {
+		stripe.Key = cfg.StripeKey
+	}
+
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
@@ -62,10 +68,10 @@ func main() {
 	}
 	defer pool.Close()
 
-	var db, schema, addr string
+	var dbName, schema, addr string
 	var port int
-	err = pool.QueryRow(ctx, `SELECT current_database(), current_schema(), inet_server_addr()::text, inet_server_port()`).Scan(&db, &schema, &addr, &port)
-	fmt.Println("CONNECTED TO:", db, schema, addr, port)
+	err = pool.QueryRow(ctx, `SELECT current_database(), current_schema(), inet_server_addr()::text, inet_server_port()`).Scan(&dbName, &schema, &addr, &port)
+	fmt.Println("CONNECTED TO:", dbName, schema, addr, port)
 
 	artistRepo := artist.NewRepository(pool)
 	mediaRepo := media.NewRepository(pool)
@@ -108,11 +114,33 @@ func main() {
 	concertRepo := concert.NewRepository(pool)
 	concertHandler := concert.NewHandler(concertRepo, notifyService)
 
+	ticketsRepo := tickets.NewRepository(pool)
+	ticketsHandler := tickets.NewHandler(ticketsRepo, cfg.FrontendURL, cfg.WebhookSecret, notifySender)
+	cartRepo := cart.NewRepository(pool)
+	cartHandler := cart.NewHandler(cartRepo, cfg.FrontendURL)
+
 	r := httpserver.NewRouter(cfg.FrontendURL, cfg.UploadsDir, artistHandler, albumHandler, trackHandler, concertHandler, geoHandler, followHandler)
 	api := r.Group("/api")
+
 	searchRepo := search.NewRepository(pool)
 	searchHandler := search.NewHandler(searchRepo)
 	searchHandler.RegisterRoutes(api)
+
+	ticketsHandler.RegisterPublicRoutes(api)
+	ticketsHandler.RegisterWebhookRoutes(api)
+	cartHandler.RegisterRoutes(api)
+
+	protected := api.Group("/")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		ticketsHandler.RegisterProtectedRoutes(protected)
+	}
+
+	admin := api.Group("/")
+	admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+	{
+		ticketsHandler.RegisterAdminRoutes(admin)
+	}
 
 	r.GET("/api/sentry-test", func(c *gin.Context) {
 		sentry.CaptureMessage("Backend Sentry Test (safe to ignore)")

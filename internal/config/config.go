@@ -17,6 +17,8 @@ type Config struct {
 	R2AccessKeyID   string
 	R2SecretKey     string
 	R2PublicBaseURL string
+	StripeKey       string
+	WebhookSecret   string
 }
 
 func Load() (Config, error) {
@@ -37,6 +39,8 @@ func Load() (Config, error) {
 		R2AccessKeyID:   os.Getenv("R2_ACCESS_KEY_ID"),
 		R2SecretKey:     os.Getenv("R2_SECRET_ACCESS_KEY"),
 		R2PublicBaseURL: os.Getenv("R2_PUBLIC_BASE_URL"),
+		StripeKey:       os.Getenv("STRIPE_SECRET_KEY"),
+		WebhookSecret:   os.Getenv("STRIPE_WEBHOOK_SECRET"),
 	}
 
 	if cfg.DatabaseURL == "" {

@@ -61,11 +61,13 @@ create table concerts (
   "when" timestamptz not null,
   country text not null,
   city text not null,
-  capacity integer not null,
+  lat double precision,
+  lng double precision,
+  capacity integer not null check (capacity >= 0),
   status text not null
 );
 
--- SUIVRE (association Users <-> Artist)
+-- FOLLOW (association Users <-> Artist)
 create table follow (
   user_id uuid not null references users(id) on delete cascade,
   artist_id uuid not null references artists(id) on delete cascade,
@@ -116,12 +118,24 @@ create table ticket_types (
   ends timestamptz not null
 );
 
+-- CART ITEMS
+create table cart_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  ticket_type_id uuid not null references ticket_types(id) on delete cascade,
+  quantity integer not null check (quantity > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, ticket_type_id)
+);
+
 -- TICKETS
 create table tickets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   concert_id uuid not null references concerts(id) on delete cascade,
   ticket_type_id uuid not null references ticket_types(id) on delete cascade,
+  order_id uuid references orders(id) on delete cascade,
   seat text not null,
   status text not null,
   issued_at timestamptz not null,
