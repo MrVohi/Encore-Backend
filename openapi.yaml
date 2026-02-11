@@ -1,0 +1,1039 @@
+openapi: 3.0.3
+info:
+  title: Groupie-Tracker API
+  version: "1.0.0"
+  description: API specification generated from backend routes.
+servers:
+  - url: https://api.example.com
+    description: Replace with your backend base URL
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    Artist:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        genre: { type: string }
+        artwork_url: { type: string }
+        preview_url: { type: string }
+        created_at: { type: string, format: date-time }
+        followers_count: { type: integer }
+        is_followed: { type: boolean, nullable: true }
+    CreateArtistRequest:
+      type: object
+      required: [name, genre]
+      properties:
+        name: { type: string }
+        genre: { type: string }
+        image_url: { type: string, nullable: true }
+        preview_url: { type: string, nullable: true }
+    UpdateArtistRequest:
+      type: object
+      properties:
+        name: { type: string }
+        genre: { type: string }
+        image_url: { type: string }
+        preview_url: { type: string }
+    Album:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        release_date: { type: string }
+        artist_id: { type: string }
+        created_at: { type: string, format: date-time }
+    CreateAlbumRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        release_date: { type: string }
+    Track:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        track_no: { type: integer }
+        album_id: { type: string }
+        created_at: { type: string, format: date-time }
+    CreateTrackRequest:
+      type: object
+      required: [title, track_no]
+      properties:
+        title: { type: string }
+        track_no: { type: integer }
+    Concert:
+      type: object
+      properties:
+        id: { type: string }
+        artist_id: { type: string }
+        when: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+    CreateConcertRequest:
+      type: object
+      required: [when, city, country, capacity, status]
+      properties:
+        when: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        status: { type: string }
+        lat: { type: number, format: double, nullable: true }
+        lng: { type: number, format: double, nullable: true }
+    UpdateConcertRequest:
+      type: object
+      properties:
+        when: { type: string }
+        city: { type: string }
+        country: { type: string }
+        capacity: { type: integer }
+        status: { type: string }
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+    CartItem:
+      type: object
+      properties:
+        id: { type: string }
+        concert_id: { type: string }
+        ticket_type_id: { type: string }
+        quantity: { type: integer }
+        price_cents: { type: integer }
+        currency: { type: string }
+        title: { type: string }
+        city: { type: string }
+        country: { type: string }
+        when: { type: string, format: date-time }
+    CartResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CartItem' }
+        total_cents: { type: integer }
+        currency: { type: string }
+    AddCartItemRequest:
+      type: object
+      required: [ticket_type_id]
+      properties:
+        ticket_type_id: { type: string }
+        quantity: { type: integer }
+    UpdateCartItemRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer }
+    TicketType:
+      type: object
+      properties:
+        id: { type: string }
+        concert_id: { type: string }
+        name: { type: string }
+        price_cents: { type: integer }
+        currency: { type: string }
+        quantity: { type: integer }
+        starts: { type: string, format: date-time }
+        ends: { type: string, format: date-time }
+    CreateTicketTypeRequest:
+      type: object
+      required: [name, price_cents, currency, quantity, starts, ends]
+      properties:
+        name: { type: string }
+        price_cents: { type: integer }
+        currency: { type: string }
+        quantity: { type: integer }
+        starts: { type: string }
+        ends: { type: string }
+    UpdateTicketTypeRequest:
+      type: object
+      properties:
+        name: { type: string }
+        price_cents: { type: integer }
+        currency: { type: string }
+        quantity: { type: integer }
+        starts: { type: string }
+        ends: { type: string }
+    TicketSummary:
+      type: object
+      properties:
+        id: { type: string }
+        concert_id: { type: string }
+        artist: { type: string }
+        when: { type: string, format: date-time }
+        city: { type: string }
+        country: { type: string }
+        ticket_type: { type: string }
+        status: { type: string }
+        issued_at: { type: string, format: date-time }
+        used_at: { type: string, format: date-time, nullable: true }
+    UserTicketsResponse:
+      type: object
+      properties:
+        active:
+          type: array
+          items: { $ref: '#/components/schemas/TicketSummary' }
+        past:
+          type: array
+          items: { $ref: '#/components/schemas/TicketSummary' }
+    AdminTicket:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        user_email: { type: string }
+        concert_id: { type: string }
+        artist: { type: string }
+        when: { type: string, format: date-time }
+        city: { type: string }
+        country: { type: string }
+        ticket_type: { type: string }
+        status: { type: string }
+        issued_at: { type: string, format: date-time }
+        used_at: { type: string, format: date-time, nullable: true }
+        order_id: { type: string, nullable: true }
+    CreateAdminTicketRequest:
+      type: object
+      required: [user_id, concert_id, ticket_type]
+      properties:
+        user_id: { type: string }
+        concert_id: { type: string }
+        ticket_type: { type: string }
+        status: { type: string }
+        issued_at: { type: string, format: date-time }
+        used_at: { type: string, format: date-time }
+    UpdateAdminTicketRequest:
+      type: object
+      properties:
+        ticket_type: { type: string }
+        status: { type: string }
+        used_at: { type: string, format: date-time }
+    TicketStats:
+      type: object
+      properties:
+        total: { type: integer }
+        active: { type: integer }
+        used: { type: integer }
+    RegisterInput:
+      type: object
+      required: [email, username, password, first_name, last_name, recaptcha_token]
+      properties:
+        email: { type: string }
+        username: { type: string }
+        password: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        recaptcha_token: { type: string }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        user: { type: object }
+    FollowRequest:
+      type: object
+      required: [artist_id]
+      properties:
+        artist_id: { type: string }
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /api/search:
+    get:
+      summary: Search
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50 }
+      responses:
+        '200':
+          description: OK
+  /api/geo:
+    get:
+      summary: Get geocoding
+      parameters:
+        - in: query
+          name: city
+          schema: { type: string }
+        - in: query
+          name: country
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /api/geo/resolve:
+    post:
+      summary: Resolve geocoding (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                city: { type: string }
+                country: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/artists:
+    get:
+      summary: List artists
+      parameters:
+        - in: query
+          name: genre
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Artist' }
+    post:
+      summary: Create artist (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateArtistRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+  /api/artists/{id}:
+    get:
+      summary: Get artist by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+    put:
+      summary: Update artist (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateArtistRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+    delete:
+      summary: Delete artist (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/artists/{id}/artwork:
+    post:
+      summary: Upload artist artwork (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+  /api/artists/{id}/preview:
+    post:
+      summary: Upload artist preview (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+  /api/albums:
+    get:
+      summary: List albums
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Album' }
+  /api/albums/{id}:
+    get:
+      summary: Get album by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Album' }
+  /api/artists/{id}/albums:
+    get:
+      summary: List albums for artist
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Album' }
+    post:
+      summary: Create album for artist (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAlbumRequest' }
+      responses:
+        '201':
+          description: Created
+  /api/tracks/{id}:
+    get:
+      summary: Get track by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /api/albums/{id}/tracks:
+    get:
+      summary: List tracks for album
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create track for album (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTrackRequest' }
+      responses:
+        '201': { description: Created }
+  /api/concerts:
+    get:
+      summary: List concerts
+      responses:
+        '200': { description: OK }
+  /api/concerts/{id}:
+    get:
+      summary: Get concert by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Update concert (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateConcertRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete concert (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/artists/{id}/concerts:
+    get:
+      summary: List concerts for artist
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create concert for artist (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateConcertRequest' }
+      responses:
+        '201': { description: Created }
+  /api/concerts/upcoming:
+    get:
+      summary: List upcoming concerts with ticket price
+      responses:
+        '200': { description: OK }
+  /api/concerts/{id}/ticket-types:
+    get:
+      summary: List ticket types for a concert
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TicketType' }
+    post:
+      summary: Create ticket type (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTicketTypeRequest' }
+      responses:
+        '201': { description: Created }
+  /api/ticket-types/{id}:
+    patch:
+      summary: Update ticket type (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTicketTypeRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete ticket type (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/tickets/checkout:
+    post:
+      summary: Create Stripe checkout for single concert (user)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [concert_id, quantity]
+              properties:
+                concert_id: { type: string }
+                quantity: { type: integer }
+      responses:
+        '200': { description: OK }
+  /api/tickets:
+    get:
+      summary: List user tickets
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserTicketsResponse' }
+  /api/tickets/admin:
+    get:
+      summary: List tickets (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create paid/owned ticket for user (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAdminTicketRequest' }
+      responses:
+        '201': { description: Created }
+  /api/tickets/admin/{id}:
+    patch:
+      summary: Update ticket (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAdminTicketRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete ticket (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/tickets/admin/stats:
+    get:
+      summary: Ticket stats (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketStats' }
+  /api/stripe/webhook:
+    post:
+      summary: Stripe webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+  /api/cart:
+    get:
+      summary: Get cart (user)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/cart/items:
+    post:
+      summary: Add cart item (user)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddCartItemRequest' }
+      responses:
+        '201': { description: Created }
+  /api/cart/items/{id}:
+    patch:
+      summary: Update cart item (user)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCartItemRequest' }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete cart item (user)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /api/cart/checkout:
+    post:
+      summary: Create Stripe checkout for cart (user)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/follows:
+    post:
+      summary: Follow artist (user)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FollowRequest' }
+      responses:
+        '200': { description: OK }
+    get:
+      summary: List followed artists (user)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/follows/{artist_id}:
+    get:
+      summary: Is following (user)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: artist_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Unfollow artist (user)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: artist_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/follows/{artist_id}/followers:
+    get:
+      summary: List followers (public)
+      parameters:
+        - in: path
+          name: artist_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/register:
+    post:
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201': { description: Created }
+  /api/auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200': { description: OK }
+  /api/auth/refresh:
+    post:
+      summary: Refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/google:
+    get:
+      summary: Google login URL
+      responses:
+        '200': { description: OK }
+  /api/auth/google/callback:
+    get:
+      summary: Google OAuth callback
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/forgot-password:
+    post:
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                mail: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/reset-password:
+    post:
+      summary: Reset password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/verify-email:
+    get:
+      summary: Verify email
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/resend-verification:
+    post:
+      summary: Resend verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                mail: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/me:
+    get:
+      summary: Current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/auth/profile:
+    put:
+      summary: Update profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                first_name: { type: string }
+                last_name: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/password:
+    post:
+      summary: Change password
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/auth/avatar:
+    post:
+      summary: Upload avatar
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete avatar
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/auth/logout:
+    post:
+      summary: Logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/me:
+    get:
+      summary: Current user (legacy)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/user:
+    get:
+      summary: Current user (legacy)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/logout:
+    post:
+      summary: Logout (legacy)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/users:
+    get:
+      summary: List users (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /api/users/{id}/promote:
+    post:
+      summary: Promote user to admin (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /api/users/{id}:
+    delete:
+      summary: Delete user (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
